@@ -1,0 +1,582 @@
+<title>Hook Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#EDEFF2; --panel:#F8F9FA; --ink:#171A21; --muted:#5B6270; --line:#D3D7DE;
+  --slate:#F2A900; --slate-ink:#1C1500; --tally:#D93A2B; --ok:#1E8A4C; --warn:#B7791F;
+  --beat-hook:#F2A900; --beat-problem:#8E97A8; --beat-solution:#3E7BD6; --beat-proof:#7A5AC8; --beat-benefit:#1E9E6A; --beat-cta:#D93A2B;
+  --display:"Bricolage Grotesque", "IBM Plex Sans Thai", system-ui, sans-serif;
+  --body:"IBM Plex Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#111318; --panel:#1A1D24; --ink:#E9ECF1; --muted:#98A0AE; --line:#2C313B;
+    --slate:#FFBE2E; --ok:#3CC47A; --warn:#E3A63A; --tally:#FF5A48;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#111318; --panel:#1A1D24; --ink:#E9ECF1; --muted:#98A0AE; --line:#2C313B;
+  --slate:#FFBE2E; --ok:#3CC47A; --warn:#E3A63A; --tally:#FF5A48;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 var(--body);padding-inline:16px}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 48px;display:grid;gap:20px}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}
+.clap{width:44px;height:36px;border-radius:4px;background:var(--ink);position:relative;overflow:hidden;flex:none}
+.clap::before{content:"";position:absolute;inset:0 0 auto 0;height:11px;background:repeating-linear-gradient(-45deg,var(--slate) 0 7px,var(--ink) 7px 14px)}
+.clap::after{content:"REC";position:absolute;left:6px;bottom:4px;font:500 9px var(--mono);color:var(--slate);letter-spacing:.1em}
+h1{font:800 34px/1 var(--display);margin:0;letter-spacing:-.02em}
+.tag{color:var(--muted);margin:2px 0 0;font-size:14px}
+.layout{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+.label{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+form{display:grid;gap:12px}
+.field{display:grid;gap:4px}
+.field label{font-size:13px;font-weight:600}
+input[type=text],textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+textarea{resize:vertical}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--slate);outline-offset:1px}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;border:0;background:transparent;color:var(--ink);font:500 13px var(--mono);padding:8px 0;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 120px}
+.btn{font:600 14px var(--body);border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--slate);border-color:var(--slate);color:var(--slate-ink)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.rec{background:var(--tally);border-color:var(--tally);color:#fff}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+.hooks{display:grid;gap:6px;max-height:340px;overflow:auto;padding-right:4px}
+.hook{text-align:left;font:inherit;font-size:14px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:8px 10px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:start}
+.hook .n{font:500 11px var(--mono);color:var(--muted);padding-top:3px}
+.hook[aria-pressed=true]{border-color:var(--slate);box-shadow:inset 3px 0 0 var(--slate)}
+.main{display:grid;gap:16px;min-width:0}
+.sumbar{display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.stats{display:flex;gap:22px;flex-wrap:wrap}
+.stat b{display:block;font:500 22px var(--mono);font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.chip{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.08em;padding:3px 8px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.over{color:var(--tally)}
+.ruler{display:grid;gap:6px}
+.track{display:flex;height:34px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.seg-b{display:flex;align-items:center;padding:0 8px;font:500 11px var(--mono);color:#fff;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;overflow:hidden;border-right:1px solid rgba(0,0,0,.18);cursor:pointer}
+.seg-b.hook-c{color:#1C1500}
+.ticks{display:flex;justify-content:space-between;font:400 11px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.beats{display:grid;gap:10px}
+.beat{display:grid;grid-template-columns:132px minmax(0,1fr);gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;scroll-margin-top:16px}
+@media (max-width:560px){.beat{grid-template-columns:minmax(0,1fr)}}
+.beat-meta{display:grid;gap:6px;align-content:start}
+.beat-name{font:800 18px/1.1 var(--display);display:flex;align-items:center;gap:8px}
+.swatch{width:10px;height:10px;border-radius:2px;flex:none}
+.tc{font:500 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.beat-body{display:grid;gap:8px;min-width:0}
+.beat-body textarea{font-size:16px;line-height:1.45;min-height:64px}
+.aux{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:560px){.aux{grid-template-columns:minmax(0,1fr)}}
+.aux div{font-size:13px;color:var(--muted)}
+.aux b{display:block;color:var(--ink);font-weight:600;font-size:13px}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.lib{display:grid;gap:6px}
+.lib-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;border-top:1px solid var(--line);padding-top:6px}
+.lib-item button{font:inherit;font-size:12px;background:none;border:0;color:var(--muted);cursor:pointer;text-decoration:underline}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:6px;font-size:14px;z-index:60}
+.copybox{width:100%;min-height:120px;font:12px var(--mono)}
+/* Teleprompter */
+.prompter{position:fixed;inset:0;background:#000;color:#fff;z-index:50;display:grid;grid-template-rows:auto 1fr}
+.prompter video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:.45}
+.p-bar{position:relative;z-index:2;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;background:rgba(0,0,0,.7)}
+.p-bar .btn{background:#1d1f24;color:#fff;border-color:#3a3d45}
+.p-bar .btn.primary{background:#FFBE2E;color:#1C1500;border-color:#FFBE2E}
+.p-bar .btn.rec{background:#FF5A48;border-color:#FF5A48}
+.p-bar label{font:500 11px var(--mono);color:#bbb;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.08em}
+.p-view{position:relative;z-index:1;overflow:hidden;mask-image:linear-gradient(transparent,#000 18%,#000 82%,transparent)}
+.p-guide{position:absolute;left:0;right:0;top:38%;border-top:2px solid rgba(255,190,46,.6);z-index:2;pointer-events:none}
+.p-text{position:absolute;left:0;right:0;margin:0 auto;max-width:900px;padding:0 24px;font:600 44px/1.35 var(--body);will-change:transform}
+.p-text.mirror{transform-origin:center}
+.p-text .pl{display:block;font:500 13px var(--mono);color:#FFBE2E;letter-spacing:.14em;text-transform:uppercase;margin-top:1.2em}
+.p-count{position:absolute;inset:0;display:grid;place-items:center;font:800 160px var(--display);color:#FFBE2E;z-index:3;pointer-events:none}
+.p-note{font-size:12px;color:#ccc}
+.p-dl a{color:#FFBE2E}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="clap" aria-hidden="true"></div>
+      <div>
+        <h1>Hook Lab</h1>
+        <p class="tag">Short-form ad scripts in seconds · สคริปต์โฆษณาคลิปสั้น → timed beats, captions, teleprompter</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="goPrompter" type="button"><span class="dot"></span> Teleprompter</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="card" aria-label="Brief">
+      <form id="brief">
+        <div class="label">The brief</div>
+        <div class="field">
+          <label for="lang">Language · ภาษา</label>
+          <div class="seg" id="lang" role="group">
+            <button type="button" data-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-lang="th" aria-pressed="false">ไทย</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="len">Length</label>
+          <div class="seg" id="len" role="group">
+            <button type="button" data-len="15" aria-pressed="false">15s</button>
+            <button type="button" data-len="30" aria-pressed="true">30s</button>
+            <button type="button" data-len="60" aria-pressed="false">60s</button>
+          </div>
+        </div>
+        <div class="field"><label for="product">Product / brand</label><input type="text" id="product"></div>
+        <div class="field"><label for="audience">Who is it for?</label><input type="text" id="audience"></div>
+        <div class="field"><label for="pain">Their pain</label><input type="text" id="pain"></div>
+        <div class="field"><label for="benefit">The big win</label><input type="text" id="benefit"></div>
+        <div class="field"><label for="cta">Call to action</label><input type="text" id="cta"></div>
+        <div class="label" style="margin-top:6px">Pick a hook · first 3 seconds</div>
+        <div class="hooks" id="hooks"></div>
+      </form>
+    </aside>
+
+    <main class="main">
+      <section class="card" aria-label="Summary">
+        <div class="sumbar">
+          <div class="stats">
+            <div class="stat"><b id="sTarget">0:30</b><span>target length</span></div>
+            <div class="stat"><b id="sSpoken">0:00</b><span>est. spoken</span></div>
+            <div class="stat"><b id="sWords">0</b><span>words</span></div>
+          </div>
+          <span class="chip ok" id="sFit">fits</span>
+        </div>
+        <div class="ruler" style="margin-top:14px">
+          <div class="track" id="track"></div>
+          <div class="ticks" id="ticks"></div>
+        </div>
+      </section>
+
+      <section class="beats" id="beats" aria-label="Beat sheet"></section>
+
+      <section class="card" aria-label="Export">
+        <div class="label" style="margin-bottom:10px">Export & save</div>
+        <div class="actions">
+          <button class="btn" type="button" id="copyScript">Copy script</button>
+          <button class="btn" type="button" id="copySrt">Copy captions (.srt)</button>
+          <button class="btn" type="button" id="dlSrt">Download .srt</button>
+          <button class="btn" type="button" id="save">Save to library</button>
+        </div>
+        <textarea class="copybox" id="copyFallback" readonly hidden aria-label="Copy manually"></textarea>
+        <div class="lib" id="lib" style="margin-top:12px"></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="prompter" id="prompter" hidden>
+  <video id="cam" playsinline muted autoplay hidden></video>
+  <div class="p-bar">
+    <button class="btn primary" type="button" id="pPlay">Play</button>
+    <button class="btn" type="button" id="pReset">Restart</button>
+    <label for="pSpeed">Speed <input type="range" id="pSpeed" min="10" max="160" value="55"></label>
+    <label for="pSize">Size <input type="range" id="pSize" min="24" max="84" value="44"></label>
+    <label for="pMirror"><input type="checkbox" id="pMirror"> Mirror</label>
+    <button class="btn" type="button" id="pCam">Camera</button>
+    <button class="btn rec" type="button" id="pRec" hidden><span class="dot"></span> Record</button>
+    <span class="p-note" id="pNote">Space = play/pause · Esc = exit</span>
+    <span class="p-dl" id="pDl"></span>
+    <button class="btn" type="button" id="pClose" style="margin-left:auto">Close</button>
+  </div>
+  <div class="p-view" id="pView">
+    <div class="p-guide"></div>
+    <div class="p-text" id="pText"></div>
+    <div class="p-count" id="pCount" hidden></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+
+const COLORS = {hook:'--beat-hook',problem:'--beat-problem',solution:'--beat-solution',proof:'--beat-proof',benefit:'--beat-benefit',cta:'--beat-cta'};
+
+const T = {
+  en: {
+    names:{hook:'Hook',problem:'Problem',solution:'Solution',proof:'Proof',benefit:'Payoff',cta:'CTA'},
+    hooks:[
+      "Stop scrolling if you're {audience} who's tired of {pain}.",
+      "I tried {product} for 7 days. Here's what happened.",
+      "3 reasons {audience} are switching to {product}.",
+      "Nobody talks about this fix for {pain}.",
+      "POV: you finally got rid of {pain}.",
+      "This is why {pain} never goes away.",
+      "{benefit}? In under 30 seconds. Watch.",
+      "Don't buy anything for {pain} until you see this.",
+      "The {pain} hack I wish I knew sooner.",
+      "If you're {audience}, you need to see this.",
+      "I was today years old when I found {product}.",
+      "Rating every fix for {pain}. This one's a 10."
+    ],
+    lines:{
+      problem:"Here's the thing. {pain} eats your time, your money, and your energy. Every single day.",
+      solution:"So I started using {product}. Watch this.",
+      proof:"I've used it for weeks now, and the difference is real. My friends noticed before I did.",
+      benefit:"{benefit}. No more {pain}.",
+      cta:"{cta}"
+    },
+    ost:{problem:"The real problem 👇",solution:"{product} ✨",proof:"Real results",benefit:"{benefit}",cta:"{cta}"},
+    shots:{
+      hook:"Face to camera, tight close-up, quick push-in on the first word",
+      problem:"Relatable B-roll of the struggle, handheld, 1s cuts",
+      solution:"Product hero shot, then hands-on demo from over the shoulder",
+      proof:"Before/after split screen or screenshot of results",
+      benefit:"Smile to camera, slow push-in, product in frame",
+      cta:"Point at caption / link, end on logo for 1s"
+    },
+    rate:2.5,
+    sample:{product:"KruAI",audience:"students cramming for exams",pain:"boring textbook memorising",benefit:"Learn twice as fast with a personal AI tutor",cta:"Download KruAI free. Link in bio."}
+  },
+  th: {
+    names:{hook:'ฮุก',problem:'ปัญหา',solution:'ทางออก',proof:'พิสูจน์',benefit:'ผลลัพธ์',cta:'CTA'},
+    hooks:[
+      "หยุดเลื่อนก่อน! ถ้าคุณเป็น{audience}ที่เบื่อ{pain}",
+      "ลองใช้ {product} มา 7 วัน ผลลัพธ์คือ...",
+      "3 เหตุผลที่{audience}หันมาใช้ {product}",
+      "ไม่มีใครบอกวิธีแก้{pain}แบบนี้เลย",
+      "POV: ในที่สุดก็เลิก{pain}ได้แล้ว",
+      "นี่คือเหตุผลที่{pain}ไม่เคยหายไปซักที",
+      "{benefit} ในไม่ถึง 30 วิ ดูเลย",
+      "อย่าเพิ่งซื้ออะไรมาแก้{pain} จนกว่าจะดูคลิปนี้",
+      "ทริคแก้{pain}ที่อยากรู้ตั้งนานแล้ว",
+      "ถ้าคุณเป็น{audience} ต้องดูคลิปนี้",
+      "เพิ่งรู้วันนี้ว่ามี {product} ด้วย",
+      "รีวิวทุกวิธีแก้{pain} อันนี้ให้เต็มสิบ"
+    ],
+    lines:{
+      problem:"ปัญหาคือ {pain} ทำให้เสียทั้งเวลา เงิน และพลังงานทุกวัน",
+      solution:"เลยลองใช้ {product} ดูสิ",
+      proof:"ใช้มาหลายอาทิตย์แล้ว เห็นผลจริง เพื่อนยังทักเลย",
+      benefit:"{benefit} ไม่ต้อง{pain}อีกต่อไป",
+      cta:"{cta}"
+    },
+    ost:{problem:"ปัญหาจริงๆ คือ 👇",solution:"{product} ✨",proof:"ผลลัพธ์จริง",benefit:"{benefit}",cta:"{cta}"},
+    shots:{
+      hook:"หน้าตรงกล้อง โคลสอัพ ซูมเข้าเร็วตอนคำแรก",
+      problem:"B-roll ความลำบากที่คนดูอิน ถือกล้องมือ ตัดทุก 1 วิ",
+      solution:"ช็อตฮีโร่สินค้า แล้วตัดเป็นเดโมมุมข้ามไหล่",
+      proof:"สปลิตจอ ก่อน/หลัง หรือแคปหน้าจอผลลัพธ์",
+      benefit:"ยิ้มเข้ากล้อง ซูมเข้าช้าๆ มีสินค้าในเฟรม",
+      cta:"ชี้ไปที่แคปชัน/ลิงก์ จบด้วยโลโก้ 1 วิ"
+    },
+    rate:3.2,
+    sample:{product:"KruAI",audience:"เด็กเตรียมสอบ",pain:"การท่องหนังสือแบบน่าเบื่อ",benefit:"เรียนเร็วขึ้น 2 เท่ากับติวเตอร์ AI ส่วนตัว",cta:"โหลด KruAI ฟรี ลิงก์อยู่ในไบโอ"}
+  }
+};
+
+const PLANS = {
+  15:[['hook',0,3],['solution',3,8],['benefit',8,12],['cta',12,15]],
+  30:[['hook',0,3],['problem',3,8],['solution',8,18],['benefit',18,25],['cta',25,30]],
+  60:[['hook',0,3],['problem',3,12],['solution',12,30],['proof',30,45],['benefit',45,54],['cta',54,60]]
+};
+
+const FIELDS = ['product','audience','pain','benefit','cta'];
+let state = store.get('hooklab:draft', null) || {lang:'en', len:30, hook:0, ...T.en.sample, edits:{}};
+if (!state.edits) state.edits = {};
+
+const fill = (tpl) => tpl.replace(/\{(\w+)\}/g, (_, k) => (state[k] || '').trim() || k);
+
+function countWords(text, lang){
+  if (lang === 'th' && window.Intl && Intl.Segmenter){
+    let n = 0; for (const s of new Intl.Segmenter('th',{granularity:'word'}).segment(text)) if (s.isWordLike) n++;
+    return n;
+  }
+  return (text.match(/\S+/g) || []).length;
+}
+const secs = (text) => countWords(text, state.lang) / T[state.lang].rate;
+const mmss = s => `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,'0')}`;
+const smpte = s => `00:00:${String(Math.floor(s)).padStart(2,'0')}:00`;
+
+function beats(){
+  const L = T[state.lang];
+  return PLANS[state.len].map(([key, a, b]) => {
+    const auto = key === 'hook' ? L.hooks[state.hook] : L.lines[key];
+    const editKey = `${state.lang}:${key}`;
+    return {
+      key, a, b, name: L.names[key],
+      line: state.edits[editKey] ?? fill(auto),
+      ost: key === 'hook' ? fill(auto).split(/[.!?]/)[0] : fill(L.ost[key]),
+      shot: L.shots[key], editKey
+    };
+  });
+}
+
+function fitChip(el, need, have){
+  const r = need / have;
+  el.className = 'chip ' + (r <= 1 ? 'ok' : r <= 1.25 ? 'warn' : 'over');
+  el.textContent = r <= 1 ? 'fits' : r <= 1.25 ? 'tight' : 'too long';
+}
+
+function renderHooks(){
+  const L = T[state.lang];
+  $('#hooks').innerHTML = '';
+  L.hooks.forEach((h, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'hook'; b.setAttribute('aria-pressed', i === state.hook);
+    b.innerHTML = `<span class="n">${String(i+1).padStart(2,'0')}</span><span></span>`;
+    b.lastChild.textContent = fill(h);
+    b.onclick = () => { state.hook = i; delete state.edits[`${state.lang}:hook`]; render(); };
+    $('#hooks').appendChild(b);
+  });
+}
+
+function renderBeats(){
+  const list = beats();
+  const box = $('#beats'); box.innerHTML = '';
+  list.forEach(bt => {
+    const el = document.createElement('article');
+    el.className = 'beat'; el.id = 'beat-' + bt.key;
+    el.innerHTML = `
+      <div class="beat-meta">
+        <div class="beat-name"><span class="swatch" style="background:var(${COLORS[bt.key]})"></span><span class="nm"></span></div>
+        <div class="tc">${smpte(bt.a)} → ${smpte(bt.b)}</div>
+        <div><span class="chip"></span></div>
+      </div>
+      <div class="beat-body">
+        <textarea rows="2" aria-label="Voiceover line"></textarea>
+        <div class="aux">
+          <div><b>On-screen text</b><span class="ost"></span></div>
+          <div><b>Shot</b><span class="shot"></span></div>
+        </div>
+      </div>`;
+    el.querySelector('.nm').textContent = bt.name;
+    el.querySelector('.ost').textContent = bt.ost;
+    el.querySelector('.shot').textContent = bt.shot;
+    const ta = el.querySelector('textarea'); ta.id = 'vo-' + bt.key; ta.value = bt.line;
+    const chip = el.querySelector('.chip');
+    fitChip(chip, secs(bt.line), bt.b - bt.a);
+    ta.oninput = () => { state.edits[bt.editKey] = ta.value; fitChip(chip, secs(ta.value), bt.b - bt.a); renderSummary(); persist(); };
+    box.appendChild(el);
+  });
+}
+
+function renderSummary(){
+  const list = beats();
+  const all = list.map(b => b.line).join(' ');
+  const spoken = secs(all);
+  $('#sTarget').textContent = mmss(state.len);
+  $('#sSpoken').textContent = mmss(spoken);
+  $('#sWords').textContent = countWords(all, state.lang);
+  fitChip($('#sFit'), spoken, state.len);
+  const tr = $('#track'); tr.innerHTML = '';
+  list.forEach(b => {
+    const s = document.createElement('div');
+    s.className = 'seg-b' + (b.key === 'hook' ? ' hook-c' : '');
+    s.style.flex = String(b.b - b.a);
+    s.style.background = `var(${COLORS[b.key]})`;
+    s.textContent = b.name; s.title = `${b.name} ${b.a}–${b.b}s`;
+    s.onclick = () => document.getElementById('beat-' + b.key).scrollIntoView({behavior:'smooth'});
+    tr.appendChild(s);
+  });
+  const step = state.len / (state.len === 60 ? 6 : state.len === 30 ? 6 : 5);
+  $('#ticks').innerHTML = '';
+  for (let t = 0; t <= state.len + .01; t += step){
+    const sp = document.createElement('span'); sp.textContent = t.toFixed(0) + 's'; $('#ticks').appendChild(sp);
+  }
+}
+
+function syncControls(){
+  document.querySelectorAll('#lang button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lang === state.lang));
+  document.querySelectorAll('#len button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.len === state.len));
+  FIELDS.forEach(f => { if (document.activeElement !== $('#'+f)) $('#'+f).value = state[f] || ''; });
+}
+
+function persist(){ store.set('hooklab:draft', state); }
+function render(){ syncControls(); renderHooks(); renderBeats(); renderSummary(); persist(); }
+
+// Brief controls
+document.querySelectorAll('#lang button').forEach(b => b.onclick = () => {
+  if (state.lang === b.dataset.lang) return;
+  const from = T[state.lang].sample, to = T[b.dataset.lang].sample;
+  // Swap the sample brief only if the user hasn't changed it
+  const untouched = FIELDS.every(f => state[f] === from[f]);
+  state.lang = b.dataset.lang;
+  if (untouched) Object.assign(state, to);
+  render();
+});
+document.querySelectorAll('#len button').forEach(b => b.onclick = () => { state.len = +b.dataset.len; render(); });
+FIELDS.forEach(f => $('#'+f).addEventListener('input', e => {
+  state[f] = e.target.value;
+  // New brief = regenerate lines that weren't hand-edited for this language
+  renderHooks(); renderBeats(); renderSummary(); persist();
+}));
+
+// Export
+function scriptText(){
+  return beats().map(b => `[${b.name.toUpperCase()} ${b.a}-${b.b}s]\nVO: ${b.line}\nTEXT: ${b.ost}\nSHOT: ${b.shot}`).join('\n\n');
+}
+function srtText(){
+  const ts = s => { const ms = Math.round(s*1000); const h = Math.floor(ms/3600000), m = Math.floor(ms/60000)%60, sec = Math.floor(ms/1000)%60, r = ms%1000;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')},${String(r).padStart(3,'0')}`; };
+  const out = []; let i = 1;
+  beats().forEach(b => {
+    let words;
+    if (state.lang === 'th' && window.Intl && Intl.Segmenter) words = [...new Intl.Segmenter('th',{granularity:'word'}).segment(b.line)].map(s => s.segment);
+    else words = b.line.split(/(\s+)/);
+    const per = state.lang === 'th' ? 10 : 10; // tokens incl. spaces per caption
+    const chunks = [];
+    for (let k = 0; k < words.length; k += per) { const c = words.slice(k, k+per).join('').trim(); if (c) chunks.push(c); }
+    const dur = (b.b - b.a) / Math.max(chunks.length, 1);
+    chunks.forEach((c, j) => out.push(`${i++}\n${ts(b.a + j*dur)} --> ${ts(b.a + (j+1)*dur - 0.05)}\n${c}\n`));
+  });
+  return out.join('\n');
+}
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 1800); }
+function copy(text, label){
+  const fb = $('#copyFallback');
+  const manual = () => { fb.hidden = false; fb.value = text; fb.focus(); fb.select(); toast('Select all and copy from the box below'); };
+  try { navigator.clipboard.writeText(text).then(() => { fb.hidden = true; toast(label + ' copied'); }, manual); } catch { manual(); }
+}
+$('#copyScript').onclick = () => copy(scriptText(), 'Script');
+$('#copySrt').onclick = () => copy(srtText(), 'Captions');
+$('#dlSrt').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([srtText()], {type:'text/plain'}));
+  a.download = (state.product || 'hooklab').replace(/\W+/g,'-') + `-${state.len}s.srt`;
+  a.click();
+  toast('Download started (if blocked, use Copy captions)');
+};
+
+// Library
+function renderLib(){
+  const items = store.get('hooklab:lib', []);
+  const box = $('#lib'); box.innerHTML = '';
+  if (!items.length){ box.innerHTML = '<div class="tag">Saved scripts show up here.</div>'; return; }
+  items.forEach((it, idx) => {
+    const r = document.createElement('div'); r.className = 'lib-item';
+    const name = document.createElement('span'); name.textContent = `${it.product} · ${it.len}s · ${it.lang.toUpperCase()} · ${new Date(it.at).toLocaleDateString()}`;
+    const btns = document.createElement('span');
+    const load = document.createElement('button'); load.type = 'button'; load.textContent = 'Load';
+    load.onclick = () => { state = JSON.parse(JSON.stringify(it.state)); render(); toast('Loaded'); };
+    const del = document.createElement('button'); del.type = 'button'; del.textContent = 'Delete';
+    del.onclick = () => { const l = store.get('hooklab:lib', []); l.splice(idx,1); store.set('hooklab:lib', l); renderLib(); };
+    btns.append(load, ' ', del); r.append(name, btns); box.appendChild(r);
+  });
+}
+$('#save').onclick = () => {
+  const l = store.get('hooklab:lib', []);
+  l.unshift({product: state.product || 'Untitled', len: state.len, lang: state.lang, at: Date.now(), state: JSON.parse(JSON.stringify(state))});
+  store.set('hooklab:lib', l.slice(0, 30)); renderLib(); toast('Saved to library');
+};
+
+// Teleprompter
+const P = {y:0, playing:false, last:0, stream:null, rec:null, chunks:[]};
+const pText = $('#pText'), pView = $('#pView');
+function pLayout(){
+  pText.style.fontSize = $('#pSize').value + 'px';
+  pText.style.transform = `translateY(${P.y}px)` + ($('#pMirror').checked ? ' scaleX(-1)' : '');
+}
+function pStart(){
+  pText.innerHTML = '';
+  beats().forEach(b => {
+    const l = document.createElement('span'); l.className = 'pl'; l.textContent = `${b.name} · ${b.a}s`;
+    const t = document.createElement('span'); t.textContent = b.line;
+    pText.append(l, t);
+  });
+  P.y = pView.clientHeight * 0.38; pLayout();
+}
+function tick(now){
+  if (!P.playing) return;
+  const dt = (now - P.last) / 1000; P.last = now;
+  P.y -= dt * +$('#pSpeed').value; pLayout();
+  if (P.y < -pText.offsetHeight) { pPause(); }
+  requestAnimationFrame(tick);
+}
+function countdown(){
+  return new Promise(res => {
+    const c = $('#pCount'); let n = 3; c.hidden = false; c.textContent = n;
+    const iv = setInterval(() => { n--; if (n === 0){ clearInterval(iv); c.hidden = true; res(); } else c.textContent = n; }, 700);
+  });
+}
+async function pPlay(){
+  if (P.playing) return pPause();
+  $('#pPlay').textContent = 'Pause';
+  if (P.y >= pView.clientHeight * 0.38 - 1) await countdown();
+  P.playing = true; P.last = performance.now(); requestAnimationFrame(tick);
+}
+function pPause(){ P.playing = false; $('#pPlay').textContent = 'Play'; }
+let wake = null;
+$('#goPrompter').onclick = async () => {
+  $('#prompter').hidden = false; pStart();
+  try { await $('#prompter').requestFullscreen?.(); } catch {}
+  try { wake = await navigator.wakeLock?.request('screen'); } catch {}
+};
+function pClose(){
+  pPause(); if (P.rec && P.rec.state === 'recording') P.rec.stop();
+  $('#prompter').hidden = true;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  try { wake?.release(); } catch {}
+}
+$('#pClose').onclick = pClose;
+$('#pPlay').onclick = pPlay;
+$('#pReset').onclick = () => { pPause(); P.y = pView.clientHeight * 0.38; pLayout(); };
+['#pSize','#pMirror'].forEach(s => $(s).addEventListener('input', pLayout));
+document.addEventListener('keydown', e => {
+  if ($('#prompter').hidden) return;
+  if (e.key === ' ') { e.preventDefault(); pPlay(); }
+  if (e.key === 'Escape') pClose();
+  if (e.key === 'ArrowUp') { P.y += 40; pLayout(); }
+  if (e.key === 'ArrowDown') { P.y -= 40; pLayout(); }
+});
+pView.addEventListener('wheel', e => { P.y -= e.deltaY; pLayout(); }, {passive:true});
+
+$('#pCam').onclick = async () => {
+  if (P.stream){ P.stream.getTracks().forEach(t => t.stop()); P.stream = null; $('#cam').hidden = true; $('#pRec').hidden = true; return; }
+  try {
+    P.stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user', width:{ideal:1080}, height:{ideal:1920}}, audio:true});
+    $('#cam').srcObject = P.stream; $('#cam').hidden = false;
+    $('#pRec').hidden = !window.MediaRecorder;
+    $('#pNote').textContent = 'Camera on. Hit Record, then Play.';
+  } catch {
+    $('#pNote').textContent = 'Camera is blocked on this page. Open index.html from the repo in Chrome to record.';
+  }
+};
+$('#pRec').onclick = () => {
+  if (P.rec && P.rec.state === 'recording'){ P.rec.stop(); return; }
+  P.chunks = [];
+  P.rec = new MediaRecorder(P.stream);
+  P.rec.ondataavailable = e => e.data.size && P.chunks.push(e.data);
+  P.rec.onstop = () => {
+    const blob = new Blob(P.chunks, {type: P.rec.mimeType || 'video/webm'});
+    const url = URL.createObjectURL(blob);
+    const ext = (P.rec.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+    $('#pDl').innerHTML = `<a href="${url}" download="take-${Date.now()}.${ext}">Save take</a>`;
+    $('#pRec').innerHTML = '<span class="dot"></span> Record';
+  };
+  P.rec.start();
+  $('#pRec').innerHTML = '<span class="dot"></span> Stop';
+  $('#pDl').textContent = '';
+};
+
+render(); renderLib();
+})();
+</script>
