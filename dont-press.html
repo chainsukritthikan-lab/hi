@@ -1,0 +1,349 @@
+<title>Don't Press It</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Mitr:wght@400;600&display=swap">
+<style>
+/* One loud world on purpose: hazard yellow, ink black, panic red. */
+:root{
+  color-scheme:light;
+  --hazard:#FFD400; --ink:#111111; --panic:#FF2E2E; --void:#140A22;
+  --th:"Mitr", system-ui, sans-serif; --loud:"Bungee", Impact, "Arial Black", sans-serif;
+}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--hazard);color:var(--ink);font-family:var(--th)}
+body.dark{background:var(--void);color:#fff}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;user-select:none;-webkit-user-select:none}
+#say{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:16px;right:16px;text-align:center;pointer-events:none;display:grid;gap:2px}
+#say .th{font-weight:600;font-size:clamp(20px,3.4vw,30px);line-height:1.25;text-wrap:balance}
+#say .en{font-size:clamp(13px,1.8vw,16px);line-height:1.4;opacity:.8;text-wrap:balance;max-width:52ch;margin-inline:auto}
+#say.pop{animation:pop .45s cubic-bezier(.2,1.8,.4,1)}
+@keyframes pop{0%{transform:scale(.6) rotate(-3deg);opacity:0}100%{transform:none;opacity:1}}
+.hud{position:fixed;left:16px;right:16px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:center;gap:12px;
+  font:400 12px/1 var(--loud);letter-spacing:.06em;pointer-events:none}
+.hud button{pointer-events:auto;font:inherit;color:inherit;background:transparent;border:2px solid currentColor;border-radius:999px;padding:7px 12px;cursor:pointer}
+.hud button:focus-visible{outline:3px solid var(--panic);outline-offset:2px}
+#presses{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion: reduce){#say.pop{animation:none}}
+</style>
+
+<canvas id="c" aria-label="A big red button. Do not press it."></canvas>
+<div id="say" aria-live="polite"><div class="th"></div><div class="en"></div></div>
+<div class="hud"><span id="presses">PRESSES: 0</span><button id="mute" type="button" aria-pressed="false">SOUND ON</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+(async () => {
+const {Engine, Bodies, Body, Composite, Query, Constraint, Events} = Matter;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const sayEl = document.getElementById('say'), pressesEl = document.getElementById('presses');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rand = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)];
+const now = () => performance.now();
+const engine = Engine.create(), world = engine.world;
+
+let W, H, DPR, walls = [], letters = [], btn = null, btnVisible = true, btnR = 60, btnPressT = 0, btnTarget = null, nextHop = 0;
+let decoys = [], real = null, drag = null, level = 0, presses = 0, startT = now(), levelT = now();
+let shake = 0, flash = 0, parts = [], floaters = [], hole = null, ptr = {x: 0, y: 0, type: 'mouse', seen: false};
+const COLORS = ['#FF2E2E', '#111111', '#FFFFFF', '#2E5BFF', '#FF7AC6'];
+
+/* ---------------- narrator ---------------- */
+const LINES = {
+  0: ['ห้ามกดปุ่มแดงนะ', "Whatever you do, don't press the red button."],
+  1: ['…กดจริงดิ', 'You actually pressed it. Fine. Throw the letters around, just DON\'T press it again.'],
+  2: ['แรงโน้มถ่วงตามนิ้วคุณแล้ว', 'Gravity now points wherever your finger goes. Happy? Stop pressing.'],
+  3: ['ปุ่มหนีไปแล้ว', 'The button has left the chat. Catch it if you can.'],
+  4: ['ตัวไหนของจริง?', 'One of these buttons is real. The rest are liars.'],
+  5: ['ไม่!!! กดเยอะเกินไปแล้ว', 'NO. You pressed it too many times.'],
+};
+function say(th, en){
+  sayEl.querySelector('.th').textContent = th; sayEl.querySelector('.en').textContent = en;
+  sayEl.classList.remove('pop'); void sayEl.offsetWidth; sayEl.classList.add('pop');
+}
+
+/* ---------------- sound ---------------- */
+let ac = null, muted = false, lastTick = 0;
+const muteBtn = document.getElementById('mute');
+muteBtn.addEventListener('click', () => { muted = !muted; muteBtn.textContent = muted ? 'SOUND OFF' : 'SOUND ON'; muteBtn.setAttribute('aria-pressed', muted); });
+function unlock(){ if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function tone(f0, f1, dur, type = 'sine', vol = .3, delay = 0){
+  if (!ac || muted) return; const t = ac.currentTime + delay;
+  const o = ac.createOscillator(), g = ac.createGain(); o.type = type;
+  o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0008, t + dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + .02);
+}
+function noise(dur, vol, type, freq){
+  if (!ac || muted) return; const t = ac.currentTime, n = Math.floor(ac.sampleRate * dur);
+  const buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = buf; f.type = type; f.frequency.value = freq; g.gain.value = vol;
+  s.connect(f).connect(g).connect(ac.destination); s.start(t);
+}
+const sfx = {
+  boom(){ tone(170, 32, .9, 'sine', .8); noise(.6, .5, 'lowpass', 900); },
+  click(){ tone(1100, 500, .06, 'square', .08); },
+  pop(){ tone(500, 1500, .09, 'triangle', .25); noise(.06, .2, 'highpass', 2500); },
+  wrong(){ tone(320, 140, .22, 'sawtooth', .1); },
+  boing(){ tone(180, 900, .28, 'sine', .3); },
+  suck(){ tone(60, 500, 4.2, 'sawtooth', .07); tone(90, 700, 4.2, 'square', .03); },
+  win(){ [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, f * 1.01, .35, 'triangle', .18, i * .09)); },
+};
+Events.on(engine, 'collisionStart', e => {
+  const t = now(); if (t - lastTick < 45) return;
+  for (const p of e.pairs) {
+    const v = Math.hypot(p.bodyA.velocity.x - p.bodyB.velocity.x, p.bodyA.velocity.y - p.bodyB.velocity.y);
+    if (v > 5 && !p.isSensor) { lastTick = t; tone(rand(160, 340), 90, .07, 'triangle', Math.min(.16, v * .012)); break; }
+  }
+});
+
+/* ---------------- world ---------------- */
+function resize(){
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  btnR = Math.max(46, Math.min(96, Math.min(W, H) * .13));
+  Composite.remove(world, walls);
+  const o = {isStatic: true, restitution: .4, friction: .5};
+  walls = [Bodies.rectangle(W / 2, H + 100, W * 4, 200, o), Bodies.rectangle(W / 2, -100, W * 4, 200, o),
+           Bodies.rectangle(-100, H / 2, 200, H * 4, o), Bodies.rectangle(W + 100, H / 2, 200, H * 4, o)];
+  Composite.add(world, walls);
+  if (level === 0) buildIntro();
+  else [...letters, ...decoys, real, btn].forEach(b => b && Body.setPosition(b, {x: Math.min(W - 20, Math.max(20, b.position.x)), y: Math.min(H - 20, Math.max(20, b.position.y))}));
+}
+const topBand = () => (sayEl.offsetTop + sayEl.offsetHeight || 90) + 16;
+const fsBase = () => Math.min(W * .15, H * .14, 150);
+
+function makeLetters(rows, fs, yStart, dynamic){
+  ctx.font = `${fs}px Bungee, Impact, sans-serif`; const out = []; let y = yStart;
+  for (const r of rows) {
+    const ch = [...r], ws = ch.map(c => ctx.measureText(c).width), gap = fs * .04;
+    let x = W / 2 - (ws.reduce((a, b) => a + b, 0) + gap * (ch.length - 1)) / 2;
+    ch.forEach((c, i) => {
+      const w = ws[i];
+      const b = Bodies.rectangle(x + w / 2, y, w * .94, fs * .76, {isStatic: !dynamic, restitution: .35, friction: .4, density: .002, chamfer: {radius: Math.min(6, w * .1)}});
+      b.ch = c; b.fs = fs; out.push(b); x += w + gap;
+    });
+    y += fs * .92;
+  }
+  Composite.add(world, out); return {bodies: out, bottom: y - fs * .46};
+}
+
+function clearAll(){
+  Composite.remove(world, [...letters, ...decoys, real, btn, drag].filter(Boolean));
+  letters = []; decoys = []; real = null; btn = null; drag = null; hole = null;
+}
+function placeButton(x, y){
+  if (btn) Composite.remove(world, btn);
+  btn = Bodies.circle(x, y, btnR, {isStatic: true, restitution: .6}); btn.home = {x, y}; btnVisible = true;
+  Composite.add(world, btn);
+}
+function buildIntro(){
+  clearAll(); document.body.classList.remove('dark'); engine.gravity.x = 0; engine.gravity.y = 1;
+  const fs = fsBase(), r = makeLetters(["DON'T", 'PRESS'], fs, topBand() + fs * .5, false);
+  letters = r.bodies;
+  placeButton(W / 2, Math.min(H - btnR - 50, Math.max(r.bottom + btnR * 1.5, H * .66)));
+}
+
+/* ---------------- effects ---------------- */
+function confetti(x, y, n, speed = 12){
+  for (let i = 0; i < n; i++) { const a = rand(0, Math.PI * 2), s = rand(speed * .3, speed);
+    parts.push({x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 4, r: rand(0, 6), vr: rand(-.3, .3), w: rand(5, 11), h: rand(3, 7), c: pick(COLORS), life: rand(90, 180)}); }
+}
+function floater(x, y, text){ floaters.push({x, y, text, life: 60, rot: rand(-.25, .25)}); }
+function kick(s){ if (!reduce) shake = Math.max(shake, s); }
+
+/* ---------------- levels ---------------- */
+function advance(){
+  presses++; pressesEl.textContent = `PRESSES: ${presses}`; btnPressT = now(); sfx.click();
+  if (level === 0) {
+    level = 1; sfx.boom(); kick(26); flash = .8;
+    letters.forEach(b => { Body.setStatic(b, false);
+      const dx = b.position.x - btn.position.x, dy = b.position.y - btn.position.y, d = Math.hypot(dx, dy) || 1, s = rand(14, 26);
+      Body.setVelocity(b, {x: dx / d * s, y: dy / d * s - 8}); Body.setAngularVelocity(b, rand(-.35, .35)); });
+    confetti(btn.position.x, btn.position.y, 90, 18);
+    Composite.remove(world, btn); btnVisible = false;
+    setTimeout(() => { if (level === 1) { Composite.add(world, btn); btnVisible = true; sfx.boing(); } }, 1400);
+  } else if (level === 1) {
+    level = 2; sfx.boing(); kick(8);
+  } else if (level === 2) {
+    level = 3; engine.gravity.x = 0; engine.gravity.y = 1; btn.isSensor = true; btnTarget = null; nextHop = 0; sfx.boing();
+  } else if (level === 3) {
+    level = 4; confetti(btn.position.x, btn.position.y, 40); startDecoys();
+  } else if (level === 4) {
+    level = 5; startHole();
+  } else if (level === 6) {
+    presses = 0; pressesEl.textContent = 'PRESSES: 0'; startT = now(); level = 0; buildIntro(); sfx.boing();
+    say(...LINES[0]); return;
+  }
+  levelT = now(); if (LINES[level]) say(...LINES[level]);
+}
+
+function startDecoys(){
+  const x0 = btn.position.x, y0 = btn.position.y; Composite.remove(world, btn); btn = null;
+  const n = W < 640 ? 14 : 22, r = btnR * .6, realIdx = Math.floor(rand(0, n));
+  for (let i = 0; i < n; i++) setTimeout(() => {
+    if (level !== 4) return;
+    const b = Bodies.circle(i === 0 ? x0 : rand(r, W - r), i === 0 ? y0 : rand(topBand() + r, H * .45), r, {restitution: .55, friction: .05, density: .002});
+    Body.setVelocity(b, {x: rand(-6, 6), y: rand(-4, 2)});
+    if (i === realIdx) real = b; else decoys.push(b);
+    Composite.add(world, b); tone(300 + i * 30, 600 + i * 30, .06, 'triangle', .1);
+  }, i * 70);
+}
+const NOPES = ['NOPE', 'ไม่ใช่!', 'LOL', 'ผิด!', 'NICE TRY', 'ใกล้แล้ว', 'FAKE', 'อิอิ'];
+function popDecoy(b){
+  Composite.remove(world, b); decoys = decoys.filter(d => d !== b);
+  confetti(b.position.x, b.position.y, 26, 9); floater(b.position.x, b.position.y, pick(NOPES)); sfx.pop(); sfx.wrong(); kick(5);
+}
+
+function startHole(){
+  if (drag) { Composite.remove(world, drag); drag = null; }
+  engine.gravity.x = 0; engine.gravity.y = 0; document.body.classList.add('dark');
+  hole = {x: W / 2, y: H * .5, r: 12, t: now()};
+  [...letters, ...decoys, real].forEach(b => { if (!b) return; b.isSensor = true; b.frictionAir = .035; });
+  sfx.suck(); kick(10);
+}
+function bang(){
+  const {x, y} = hole; Composite.remove(world, [...letters, ...decoys, real].filter(Boolean));
+  letters = []; decoys = []; real = null; hole = null;
+  document.body.classList.remove('dark'); flash = 1; kick(34); sfx.boom(); sfx.win();
+  engine.gravity.x = 0; engine.gravity.y = 1; confetti(x, y, 260, 22);
+  const secs = Math.round((now() - startT) / 1000);
+  say('Chain ทำเว็บพังแล้ว 💥', `You broke it in ${presses} presses and ${secs} seconds. Press the button to put everything back.`);
+  const fs = fsBase() * .8, r = makeLetters(['YOU', 'BROKE', 'IT'], fs, topBand() + fs * .5, false);
+  letters = r.bodies;
+  letters.forEach((b, i) => { b.tw = {fx: x, fy: y, tx: b.position.x, ty: b.position.y, t0: now() + i * 55, spin: rand(-6, 6)}; Body.setPosition(b, {x, y}); });
+  const by = Math.min(H - btnR - 50, Math.max(r.bottom + btnR * 1.5, H * .7));
+  level = 6; levelT = now();
+  setTimeout(() => { if (level === 6) { placeButton(W / 2, by); sfx.boing(); } }, 1600);
+}
+
+/* ---------------- input ---------------- */
+function pt(e){ const r = cv.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; }
+cv.addEventListener('pointermove', e => { const p = pt(e); ptr.x = p.x; ptr.y = p.y; ptr.type = e.pointerType; ptr.seen = true; if (drag) drag.pointA = p; });
+cv.addEventListener('pointerdown', e => {
+  unlock(); const p = pt(e); ptr.x = p.x; ptr.y = p.y; ptr.type = e.pointerType; ptr.seen = true;
+  if (level === 4) {
+    const hit = Query.point([...decoys, real].filter(Boolean), p)[0];
+    if (hit && hit === real) { advance(); return; }
+    if (hit) { popDecoy(hit); return; }
+  } else if (btn && btnVisible && level !== 5 && Math.hypot(p.x - btn.position.x, p.y - btn.position.y) < btnR * 1.08) { advance(); return; }
+  if (level >= 1 && level !== 5) {
+    const b = Query.point(letters.filter(l => !l.isStatic), p)[0];
+    if (b) {
+      drag = Constraint.create({pointA: {...p}, bodyB: b, pointB: {x: p.x - b.position.x, y: p.y - b.position.y}, stiffness: .1, damping: .05, length: 0});
+      Composite.add(world, drag); try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+  }
+});
+const endDrag = () => { if (drag) { Composite.remove(world, drag); drag = null; } };
+cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+
+/* ---------------- drawing ---------------- */
+function drawButton(x, y, r, ang, pressed){
+  const depth = r * .18 * (pressed ? .25 : 1);
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0, r * .18, r * 1.08, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#8E0E14'; ctx.beginPath(); ctx.arc(0, r * .18, r, 0, Math.PI * 2); ctx.fill();
+  ctx.translate(0, r * .18 - depth);
+  const g = ctx.createRadialGradient(-r * .35, -r * .4, r * .1, 0, 0, r);
+  g.addColorStop(0, '#FF8A7E'); g.addColorStop(.5, '#FF2E2E'); g.addColorStop(1, '#D0101A');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = Math.max(2, r * .06); ctx.strokeStyle = '#111'; ctx.stroke();
+  ctx.rotate(ang); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `600 ${r * .42}px Mitr, sans-serif`; ctx.fillText('ห้ามกด', 0, r * .02);
+  ctx.restore();
+}
+function drawLetter(b, ink){
+  ctx.save(); ctx.translate(b.position.x, b.position.y); ctx.rotate(b.angle);
+  ctx.font = `${b.fs}px Bungee, Impact, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const o = b.fs * .045;
+  ctx.fillStyle = '#FF2E2E'; ctx.fillText(b.ch, o, b.fs * .06 + o);
+  ctx.fillStyle = ink; ctx.fillText(b.ch, 0, b.fs * .06);
+  ctx.restore();
+}
+
+function update(){
+  const t = now(), lt = (t - levelT) / 1000;
+  if (level === 2) {
+    let gx, gy;
+    if (ptr.seen) { gx = ptr.x - W / 2; gy = ptr.y - H / 2; } else { gx = Math.cos(t / 900); gy = Math.sin(t / 900); }
+    const d = Math.hypot(gx, gy) || 1; engine.gravity.x = gx / d; engine.gravity.y = gy / d;
+  }
+  if (level === 3 && btn) {
+    const tired = lt > 9, R = btnR, p = btn.position;
+    let nx = p.x, ny = p.y;
+    if (ptr.type === 'mouse') {
+      const dx = p.x - ptr.x, dy = p.y - ptr.y, d = Math.hypot(dx, dy) || 1, zone = R * (tired ? 1.4 : 2.4);
+      if (d < zone) { const sp = Math.min(tired ? 6 : 13, (zone - d) * .4); nx += dx / d * sp; ny += dy / d * sp; }
+      const minY = topBand() + R, cx = Math.min(W - R, Math.max(R, nx)), cy = Math.min(H - R - 30, Math.max(minY, ny));
+      if ((cx !== nx && cy !== ny) || (d < R * .9 && !tired)) { nx = rand(R, W - R); ny = rand(minY, H - R - 30); sfx.boing(); } // cornered: teleport
+      else { nx = cx; ny = cy; }
+    } else {
+      if (t > nextHop) { btnTarget = {x: rand(R, W - R), y: rand(topBand() + R, H - R - 30)}; nextHop = t + (tired ? 1500 : 950); tone(500, 900, .05, 'triangle', .06); }
+      if (btnTarget) { nx += (btnTarget.x - nx) * .35; ny += (btnTarget.y - ny) * .35; }
+    }
+    Body.setPosition(btn, {x: nx, y: ny});
+  }
+  if (level === 5 && hole) {
+    const age = (t - hole.t) / 1000, all = [...letters, ...decoys, real].filter(Boolean);
+    for (const b of all) {
+      if (b.gone) continue;
+      const dx = hole.x - b.position.x, dy = hole.y - b.position.y, d = Math.hypot(dx, dy) || 1, k = b.mass * (.0009 + age * .0004);
+      Body.applyForce(b, b.position, {x: dx / d * k - dy / d * k * .8, y: dy / d * k + dx / d * k * .8});
+      if (d < hole.r + 6) { b.gone = true; Composite.remove(world, b); hole.r += 1.6; tone(rand(700, 1200), 200, .08, 'sine', .08); kick(3); }
+    }
+    if (age > 4.4 || all.every(b => b.gone)) bang();
+  }
+  if (level === 6) for (const b of letters) if (b.tw) {
+    const p = Math.min(1, Math.max(0, (t - b.tw.t0) / 700)), c = 2.2, e = 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2);
+    Body.setPosition(b, {x: b.tw.fx + (b.tw.tx - b.tw.fx) * e, y: b.tw.fy + (b.tw.ty - b.tw.fy) * e}); Body.setAngle(b, (1 - p) * b.tw.spin);
+    if (p >= 1) { if (!b.tw.done) { b.tw.done = true; tone(400 + b.tw.tx, 900, .05, 'triangle', .06); } }
+  }
+  Engine.update(engine, 1000 / 60);
+}
+
+function render(){
+  const t = now(), dark = level === 5;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = dark ? '#140A22' : '#FFD400'; ctx.fillRect(0, 0, W, H);
+  if (shake > .3) { ctx.translate(rand(-shake, shake), rand(-shake, shake)); shake *= .88; }
+  if (!dark) { // hazard stripes on the floor
+    ctx.save(); ctx.fillStyle = '#111'; ctx.globalAlpha = .9; const h = 10;
+    ctx.beginPath(); ctx.rect(0, H - h, W, h); ctx.clip();
+    for (let x = -20; x < W + 20; x += 28) { ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + 14, H); ctx.lineTo(x + 24, H - h); ctx.lineTo(x + 10, H - h); ctx.fill(); }
+    ctx.restore();
+  }
+  if (hole) {
+    const g = ctx.createRadialGradient(hole.x, hole.y, hole.r * .6, hole.x, hole.y, hole.r * 4);
+    g.addColorStop(0, '#000'); g.addColorStop(.25, '#FF8A00'); g.addColorStop(.45, 'rgba(255,46,46,.5)'); g.addColorStop(1, 'rgba(46,91,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(hole.x, hole.y, hole.r * 4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#FFD400'; ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) { const a = t / 180 + i * 2.1; ctx.beginPath(); ctx.arc(hole.x, hole.y, hole.r * (1.6 + i * .5), a, a + 1.2); ctx.stroke(); }
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(hole.x, hole.y, hole.r, 0, Math.PI * 2); ctx.fill();
+  }
+  const ink = dark ? '#FFFFFF' : '#111111';
+  for (const b of letters) if (!b.gone) drawLetter(b, ink);
+  for (const b of [...decoys, real]) if (b && !b.gone) drawButton(b.position.x, b.position.y, b.circleRadius, b.angle, false);
+  if (btn && btnVisible) {
+    const pressed = t - btnPressT < 140, wob = level === 0 ? Math.sin(t / 260) * .06 : 0;
+    drawButton(btn.position.x, btn.position.y, btnR, wob, pressed);
+  }
+  for (const p of parts) { p.vy += .35; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr; p.life--;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore(); }
+  parts = parts.filter(p => p.life > 0 && p.y < H + 30);
+  for (const f of floaters) { f.y -= 1.4; f.life--;
+    ctx.save(); ctx.globalAlpha = Math.min(1, f.life / 30); ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+    ctx.font = '600 24px Mitr, Bungee, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.strokeStyle = '#111'; ctx.strokeText(f.text, 0, 0);
+    ctx.fillStyle = '#fff'; ctx.fillText(f.text, 0, 0); ctx.restore(); }
+  floaters = floaters.filter(f => f.life > 0);
+  if (flash > .02) { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = `rgba(255,255,255,${flash})`; ctx.fillRect(0, 0, W, H); flash *= .9; }
+}
+function loop(){ update(); render(); requestAnimationFrame(loop); }
+
+say(...LINES[0]);
+try { await Promise.race([Promise.all([document.fonts.load('100px Bungee'), document.fonts.load('600 40px Mitr', 'ห้ามกด')]), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
+resize();
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 150); });
+loop();
+})();
+</script>

@@ -19,3 +19,9 @@ Open `index.html` in Chrome. No install, no API key.
 # Yi Peng ยี่เป็ง 🏮
 
 `lanterns.html` — type a wish (Thai or English) and a few hundred sky lanterns rise off the river and spell it across the night sky. Tap the sky to send single lanterns. Sound is a ranat-style chime tuned to Thai 7-tone equal temperament. Lanterns that fade become stars, and the page remembers how many.
+
+---
+
+# Don't Press It 🔴
+
+`dont-press.html` — a big red button that begs you not to press it. Every press breaks something new: the letters explode into physics objects you can throw, gravity starts following your finger, the button runs away, 20 fake buttons rain down, and then a black hole eats the whole page.
