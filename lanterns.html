@@ -1,0 +1,279 @@
+<title>Yi Peng Night</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Charm:wght@700&family=Kanit:wght@300;500;700&display=swap">
+<style>
+/* One deliberate world: a Chiang Mai night in November. No light theme on purpose. */
+:root{
+  color-scheme:dark;
+  --night:#0A0D26; --dusk:#1C1542; --water:#060819;
+  --ember:#FFB25A; --flame:#FFE6B0; --mist:#B9B6D9; --line:rgba(255,214,160,.28);
+  --display:"Charm", "Kanit", serif;
+  --body:"Kanit", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--night);color:var(--flame);font-family:var(--body);font-weight:300}
+canvas#sky{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:manipulation;cursor:crosshair}
+.mast{position:fixed;top:calc(18px + env(safe-area-inset-top,0px));left:20px;right:20px;pointer-events:none;display:grid;gap:4px}
+.mast h1{margin:0;font-family:var(--display);font-weight:700;font-size:clamp(30px,5vw,48px);line-height:1;letter-spacing:.01em;text-wrap:balance;
+  color:var(--flame);text-shadow:0 0 24px rgba(255,170,80,.45)}
+.mast h1 span{font-size:.62em;color:var(--ember);margin-left:.35em}
+.mast p{margin:0;max-width:34ch;font-size:14px;line-height:1.5;color:var(--mist)}
+.dock{position:fixed;left:16px;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));display:grid;justify-items:center;gap:10px;pointer-events:none}
+form{pointer-events:auto;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;width:min(520px,100%)}
+input{flex:1 1 200px;min-width:0;font:500 18px/1 var(--body);color:var(--flame);background:rgba(6,8,25,.62);
+  border:1px solid var(--line);border-radius:999px;padding:13px 20px;outline:none;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+input::placeholder{color:rgba(185,182,217,.6)}
+input:focus-visible{border-color:var(--ember);box-shadow:0 0 0 3px rgba(255,178,90,.25)}
+button{font:500 16px/1 var(--body);border-radius:999px;cursor:pointer}
+.go{flex:0 0 auto;color:#2A1300;background:linear-gradient(180deg,#FFE0A6,#FF9D3D);border:0;padding:13px 22px;
+  box-shadow:0 0 28px rgba(255,160,60,.45)}
+.go:hover{filter:brightness(1.08)}
+.go:focus-visible,.ghost:focus-visible{outline:2px solid var(--flame);outline-offset:3px}
+.meta{pointer-events:auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 14px;font-size:12.5px;color:var(--mist)}
+.ghost{font-size:12.5px;color:var(--mist);background:transparent;border:1px solid var(--line);padding:6px 12px}
+.ghost[aria-pressed="true"]{color:var(--flame);border-color:var(--ember)}
+#count{font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+
+<canvas id="sky" aria-label="Night sky over a river. Tap the sky to release a lantern."></canvas>
+
+<header class="mast">
+  <h1>Yi Peng <span lang="th">ยี่เป็ง</span></h1>
+  <p>Type a wish, in Thai or English. A few hundred lanterns will carry it into the sky. Tap anywhere to send one of your own.</p>
+</header>
+
+<div class="dock">
+  <form id="wishForm" autocomplete="off">
+    <label for="wishText" class="sr">Your wish</label>
+    <input id="wishText" maxlength="14" value="Chain" placeholder="ขอให้…">
+    <button class="go" type="submit">ปล่อยโคม · Release</button>
+  </form>
+  <div class="meta">
+    <button class="ghost" id="snd" type="button" aria-pressed="false">♪ Sound off</button>
+    <span id="count"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+const cv = document.getElementById('sky'), ctx = cv.getContext('2d');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rand = (a, b) => a + Math.random() * (b - a);
+const now = () => performance.now() / 1000;
+let W, H, DPR, horizon, bg, sprite, stars = [], lanterns = [], holdTimer = null;
+
+/* ---------- storage (optional) ---------- */
+let starCount = 0;
+try { starCount = +localStorage.getItem('yipeng.stars') || 0; } catch (e) {}
+const countEl = document.getElementById('count');
+function showCount(){ countEl.textContent = starCount ? `${starCount.toLocaleString()} of your lanterns became stars` : 'Every lantern that fades becomes a star'; }
+function addStarCount(n){ starCount += n; try { localStorage.setItem('yipeng.stars', starCount); } catch (e) {} showCount(); }
+showCount();
+
+/* ---------- sound: Thai 7-tone equal temperament (171.4 cents per step) ---------- */
+let ac = null, soundOn = false, lastNote = 0;
+const SCALE = [0,1,2,4,5,7,8,9,11,12,14,15,16]; // pentatonic subset of the 7-TET octave
+function note(deg, vel = .16){
+  if (!soundOn || !ac) return;
+  const t = ac.currentTime; if (t - lastNote < .055) return; lastNote = t;
+  const f = 262 * Math.pow(2, SCALE[Math.max(0, Math.min(SCALE.length - 1, deg))] / 7);
+  const g = ac.createGain(), pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + .006); g.gain.exponentialRampToValueAtTime(.0005, t + 1.4);
+  [[1,1],[3.93,.18],[9.1,.05]].forEach(([m, a]) => {          // wooden ranat bar partials
+    const o = ac.createOscillator(), og = ac.createGain();
+    o.type = 'sine'; o.frequency.value = f * m; og.gain.value = a;
+    o.connect(og).connect(g); o.start(t); o.stop(t + (m > 1 ? .25 : 1.5));
+  });
+  if (pan) { pan.pan.value = rand(-.6, .6); g.connect(pan).connect(ac.destination); } else g.connect(ac.destination);
+}
+const sndBtn = document.getElementById('snd');
+function setSound(on){
+  soundOn = on;
+  if (on && !ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { soundOn = false; } }
+  if (ac && ac.state === 'suspended') ac.resume();
+  sndBtn.setAttribute('aria-pressed', soundOn); sndBtn.textContent = soundOn ? '♪ Sound on' : '♪ Sound off';
+}
+sndBtn.addEventListener('click', () => setSound(!soundOn));
+
+/* ---------- scene ---------- */
+function makeSprite(){
+  const s = 96, c = document.createElement('canvas'); c.width = c.height = s;
+  const g = c.getContext('2d'), cx = s / 2, cy = s / 2;
+  const glow = g.createRadialGradient(cx, cy + 4, 0, cx, cy + 4, s / 2);
+  glow.addColorStop(0, 'rgba(255,190,100,.55)'); glow.addColorStop(.35, 'rgba(255,140,50,.18)'); glow.addColorStop(1, 'rgba(255,120,40,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, s, s);
+  // paper body: slightly wider at the top, like a khom loi
+  const body = g.createLinearGradient(0, cy - 13, 0, cy + 14);
+  body.addColorStop(0, '#FFF1C9'); body.addColorStop(.6, '#FFC06A'); body.addColorStop(1, '#FF8A2E');
+  g.fillStyle = body; g.beginPath();
+  g.moveTo(cx - 10, cy - 13); g.quadraticCurveTo(cx, cy - 17, cx + 10, cy - 13);
+  g.lineTo(cx + 7, cy + 12); g.quadraticCurveTo(cx, cy + 14, cx - 7, cy + 12); g.closePath(); g.fill();
+  g.fillStyle = 'rgba(255,250,230,.95)'; g.beginPath(); g.ellipse(cx, cy + 10, 2.4, 3.4, 0, 0, Math.PI * 2); g.fill();
+  return c;
+}
+
+function ridge(g, base, amp, seed, color){
+  g.fillStyle = color; g.beginPath(); g.moveTo(0, horizon);
+  for (let x = 0; x <= W; x += 6) {
+    const y = base - amp * (.55 * Math.sin(x * .004 + seed) + .3 * Math.sin(x * .011 + seed * 2.3) + .15 * Math.sin(x * .031 + seed * 5.1));
+    g.lineTo(x, y);
+  }
+  g.lineTo(W, horizon); g.closePath(); g.fill();
+}
+
+function resize(){
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight; horizon = Math.round(H * .8);
+  cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  bg = document.createElement('canvas'); bg.width = W * DPR; bg.height = H * DPR;
+  const g = bg.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const sky = g.createLinearGradient(0, 0, 0, horizon);
+  sky.addColorStop(0, '#05061A'); sky.addColorStop(.55, '#0E1036'); sky.addColorStop(.9, '#2A1A4A'); sky.addColorStop(1, '#4A2446');
+  g.fillStyle = sky; g.fillRect(0, 0, W, horizon);
+  ridge(g, horizon - H * .09, H * .07, 1.7, '#15102E');   // Doi Suthep, far
+  ridge(g, horizon - H * .03, H * .045, 4.2, '#0B0A1E');  // near hills
+  const water = g.createLinearGradient(0, horizon, 0, H);
+  water.addColorStop(0, '#1A1238'); water.addColorStop(.25, '#0A0B24'); water.addColorStop(1, '#04050F');
+  g.fillStyle = water; g.fillRect(0, horizon, W, H - horizon);
+  stars = Array.from({length: Math.round(W * H / 5200)}, () => ({x: rand(0, W), y: rand(0, horizon * .92) ** 1.08 / (horizon * .92) ** .08, r: rand(.3, 1.3), p: rand(0, 6.3), s: rand(.6, 2.2)}));
+  lanterns.forEach(l => { if (l.state !== 'free') free(l); });
+}
+
+/* ---------- lanterns ---------- */
+function ambient(x, y, v){
+  lanterns.push({state: 'free', x: x ?? rand(0, W), y: y ?? horizon - rand(0, 10), vy: -(v ?? rand(10, 26)), size: rand(16, 34),
+    ph: rand(0, 6.3), a: 0, fadeY: rand(.04, .45) * H, wish: false, born: now()});
+}
+function free(l){ l.state = 'free'; l.vy = -rand(14, 30); l.fadeY = rand(.02, .3) * H; }
+
+function sampleText(text){
+  const w = Math.floor(W), h = Math.floor(H * .42), oc = document.createElement('canvas');
+  oc.width = w; oc.height = h; const o = oc.getContext('2d');
+  let fs = Math.min(h * .72, W * .32);
+  const setFont = () => o.font = `700 ${fs}px Kanit, "Noto Sans Thai", sans-serif`;
+  setFont(); const m = o.measureText(text).width; if (m > w * .86) { fs *= w * .86 / m; setFont(); }
+  o.textAlign = 'center'; o.textBaseline = 'middle'; o.fillStyle = '#fff'; o.fillText(text, w / 2, h / 2);
+  const d = o.getImageData(0, 0, w, h).data; let filled = 0;
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) if (d[(y * w + x) * 4 + 3] > 128) filled++;
+  const target = W < 640 ? 300 : 440, step = Math.max(4, Math.sqrt(filled * 4 / target));
+  const top = H * .36 - h / 2, pts = [];
+  for (let y = step / 2; y < h; y += step) for (let x = step / 2; x < w; x += step) {
+    const jx = x + rand(-.3, .3) * step, jy = y + rand(-.3, .3) * step;
+    const ix = Math.min(w - 1, Math.round(jx)), iy = Math.min(h - 1, Math.round(jy));
+    if (d[(iy * w + ix) * 4 + 3] > 128) pts.push({x: jx, y: jy + top});
+  }
+  return {pts, step};
+}
+
+async function makeWish(text){
+  text = text.trim() || 'ยี่เป็ง';
+  try { await document.fonts.load(`700 100px Kanit`, text); } catch (e) {}
+  lanterns.forEach(l => { if (l.wish && l.state !== 'free') free(l); });
+  const {pts, step} = sampleText(text), t = now();
+  const minX = Math.min(...pts.map(p => p.x)), spanX = (Math.max(...pts.map(p => p.x)) - minX) || 1;
+  let last = 0;
+  pts.forEach(p => {
+    const k = (p.x - minX) / spanX;
+    const sx = Math.max(10, Math.min(W - 10, p.x + rand(-.18, .18) * W));
+    const l = {state: 'fly', wish: true, sx, sy: horizon + rand(4, (H - horizon) * .5), tx: p.x, ty: p.y,
+      t0: t + (reduce ? rand(0, .6) : k * 1.6 + rand(0, 1.8)), dur: reduce ? .01 : rand(3.2, 5), ph: rand(0, 6.3),
+      size: step * rand(2.2, 2.8), a: 0, deg: Math.round(k * (SCALE.length - 1)), sounded: false, x: sx, y: horizon};
+    last = Math.max(last, l.t0 + l.dur); lanterns.push(l);
+  });
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => lanterns.forEach(l => { if (l.wish && l.state === 'hold') { free(l); l.vy = -rand(8, 22); } }), (last - t + 6.5) * 1000);
+}
+
+const ease = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+
+function step(l, t, dt){
+  if (l.dead) return;
+  if (l.state === 'fly') {
+    if (t < l.t0) return;
+    const p = Math.min(1, (t - l.t0) / l.dur), e = ease(p), u = 1 - e;
+    const cx = l.sx, cy = l.ty + (l.sy - l.ty) * .35;                 // rise mostly straight up, then drift into place
+    l.x = u * u * l.sx + 2 * u * e * cx + e * e * l.tx + Math.sin(t * 1.4 + l.ph) * 9 * u;
+    l.y = u * u * l.sy + 2 * u * e * cy + e * e * l.ty;
+    l.a = Math.min(1, (t - l.t0) / .5);
+    if (p >= 1) { l.state = 'hold'; if (!l.sounded) { l.sounded = true; note(l.deg); } }
+  } else if (l.state === 'hold') {
+    l.x = l.tx + Math.sin(t * .8 + l.ph) * 1.3; l.y = l.ty + Math.sin(t * 1.1 + l.ph) * 1.6; l.a = 1;
+  } else {
+    l.vy -= 2.2 * dt; l.y += l.vy * dt; l.x += (Math.sin(t * .7 + l.ph) * 6 + 5) * dt;
+    l.size *= 1 - .03 * dt;
+    if (l.a < 1 && l.y > l.fadeY + 40) l.a = Math.min(1, l.a + dt * 1.2);
+    if (l.y < l.fadeY + 40) l.a -= dt * .6;
+    if (l.a <= 0 || l.y < -60) {
+      l.dead = true;
+      if (l.y > 0 && stars.length < 900) stars.push({x: l.x, y: l.y, r: rand(.6, 1.4), p: rand(0, 6.3), s: rand(.6, 2), flash: 1});
+      if (l.wish) pendingStars++;
+    }
+  }
+}
+let pendingStars = 0;
+
+function drawL(l, t){
+  if (l.dead || l.a <= 0 || (l.state === 'fly' && t < l.t0)) return;
+  const flick = .85 + .15 * Math.sin(t * 9 + l.ph * 7) * Math.sin(t * 3.3 + l.ph);
+  const s = l.size;
+  ctx.globalAlpha = l.a * flick;
+  ctx.drawImage(sprite, l.x - s / 2, l.y - s / 2, s, s);
+  if (l.y < horizon) {                                                // reflection on the Ping river
+    const ry = horizon + (horizon - l.y) * .18 + 4;
+    if (ry < H) {
+      ctx.globalAlpha = l.a * flick * .22 * (1 - (ry - horizon) / (H - horizon));
+      ctx.drawImage(sprite, l.x - s * .35 + Math.sin(t * 2 + ry * .15) * 3, ry - s * .5, s * .7, s * 1.3);
+    }
+  }
+}
+
+let prev = now(), frame = 0;
+function tick(){
+  const t = now(), dt = Math.min(.05, t - prev); prev = t; frame++;
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.drawImage(bg, 0, 0, W, H);
+  ctx.fillStyle = '#FFF4DA';
+  for (const s of stars) {
+    let a = .35 + .35 * Math.sin(t * s.s + s.p);
+    if (s.flash) { a = Math.min(1, a + s.flash); s.flash = Math.max(0, s.flash - dt * .7); }
+    ctx.globalAlpha = a; ctx.fillRect(s.x, s.y, s.r + (s.flash || 0) * 2, s.r + (s.flash || 0) * 2);
+  }
+  // water shimmer
+  ctx.globalAlpha = .08; ctx.fillStyle = '#FFC98A';
+  for (let i = 0; i < 18; i++) { const y = horizon + 6 + (i / 18) * (H - horizon); ctx.fillRect((Math.sin(t * .3 + i * 2.1) * .5 + .5) * W - 40, y, 30 + i * 4, 1); }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const l of lanterns) { step(l, t, dt); drawL(l, t); }
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  if (frame % 30 === 0) {
+    lanterns = lanterns.filter(l => !l.dead);
+    if (pendingStars) { addStarCount(pendingStars); pendingStars = 0; }
+  }
+  const amb = lanterns.filter(l => !l.wish).length;
+  if (amb < (W < 640 ? 9 : 16) && Math.random() < .03) ambient();
+  requestAnimationFrame(tick);
+}
+
+/* ---------- input ---------- */
+cv.addEventListener('pointerdown', e => {
+  if (e.clientY > horizon + 20) return;
+  lanterns.push({state: 'free', x: e.clientX, y: e.clientY, vy: -rand(18, 30), size: rand(34, 46), ph: rand(0, 6.3), a: 1, fadeY: rand(.03, .2) * H, wish: true});
+  note(Math.round((1 - e.clientY / horizon) * (SCALE.length - 1)), .2);
+});
+document.getElementById('wishForm').addEventListener('submit', e => {
+  e.preventDefault();
+  if (!ac) setSound(true);            // first release is a user gesture, so sound can start here
+  makeWish(document.getElementById('wishText').value);
+});
+
+sprite = makeSprite();
+resize();
+let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(resize, 150); });
+for (let i = 0; i < 12; i++) ambient(rand(0, W), rand(H * .25, horizon), rand(8, 20));
+lanterns.forEach(l => l.a = 1);
+requestAnimationFrame(tick);
+// The first wish writes itself.
+setTimeout(() => makeWish(document.getElementById('wishText').value), 500);
+})();
+</script>

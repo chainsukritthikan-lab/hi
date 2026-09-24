@@ -13,3 +13,9 @@ Open `index.html` in Chrome. No install, no API key.
 - **Teleprompter**: fullscreen scrolling script, speed + size, mirror mode, 3-2-1 countdown, space = play/pause.
 - **Record in browser**: turn on the camera in teleprompter mode and record takes straight to a video file.
 - **Library**: save scripts locally and reload them later.
+
+---
+
+# Yi Peng ยี่เป็ง 🏮
+
+`lanterns.html` — type a wish (Thai or English) and a few hundred sky lanterns rise off the river and spell it across the night sky. Tap the sky to send single lanterns. Sound is a ranat-style chime tuned to Thai 7-tone equal temperament. Lanterns that fade become stars, and the page remembers how many.
