@@ -43,14 +43,21 @@ button{font:600 12px var(--display);letter-spacing:.2em;text-transform:uppercase
 button:hover{border-color:var(--cyan-2)}button.on{background:var(--cyan);color:#001018;border-color:var(--cyan)}
 #help{position:fixed;left:20px;bottom:74px;font:400 11px var(--mono);color:var(--muted);line-height:1.8;letter-spacing:.06em}
 kbd{border:1px solid var(--line);padding:0 5px;border-radius:2px;color:var(--ink)}
+#boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(3,7,11,.72);z-index:5;cursor:pointer;transition:opacity .8s}
+#boot.gone{opacity:0;pointer-events:none}
+#bootlog{font:500 12px var(--mono);letter-spacing:.14em;color:var(--cyan);width:min(460px,86vw);min-height:150px;text-transform:uppercase;white-space:pre-line;text-shadow:0 0 8px rgba(43,217,255,.5)}
+#bootgo{font:700 14px var(--display);letter-spacing:.6em;color:var(--ink);border:1px solid var(--cyan);padding:12px 26px;opacity:0;transition:opacity .6s;box-shadow:0 0 24px rgba(43,217,255,.25) inset}
+#bootgo.show{opacity:1;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 34px rgba(43,217,255,.55) inset}}
 @media (max-width:900px){#log{display:none}#help{display:none}}
 </style>
 </head>
 <body>
 <canvas id="orb" title="Click to talk"></canvas>
+<div id="boot"><div id="bootlog"></div><div id="bootgo">CLICK TO ACTIVATE</div></div>
 
 <div class="hud tl"><div class="brand">C E E</div><div id="conn"><span class="dot"></span>connecting</div></div>
-<div class="hud tr"><div id="clock">--:--:--</div><div id="date"></div></div>
+<div class="hud tr"><div id="clock">--:--:--</div><div id="date"></div><div id="wx"></div><div id="batt"></div></div>
 <div id="tools"></div>
 <div id="state">standby</div>
 <div id="live"></div>
@@ -85,11 +92,11 @@ let level = 0, target = 0;   // orb energy 0..1
 let abortCtl = null;
 
 // ---------- UI helpers ----------
-const labels = {idle:"standby", listening:"listening", thinking:"thinking", speaking:"speaking"};
+const labels = {idle:"standing by", listening:"listening", thinking:"processing", speaking:"speaking"};
 let thinkStart = 0;
 function setState(s){ state = s; if(s==="thinking") thinkStart = performance.now();
   $("#state").textContent = labels[s] + (s==="idle" && wakeOn ? " · say CEE" : ""); }
-setInterval(()=>{ if(state==="thinking") $("#state").textContent = "thinking · " + Math.round((performance.now()-thinkStart)/1000) + "s"; }, 250);
+setInterval(()=>{ if(state==="thinking") $("#state").textContent = "processing · " + Math.round((performance.now()-thinkStart)/1000) + "s"; }, 250);
 function live(t){ $("#live").textContent = t || ""; }
 function addMsg(who, text, cls){
   const d = document.createElement("div"); d.className = "msg " + (cls||"");
@@ -149,8 +156,10 @@ const isThai = t => /[฀-๿]/.test(t);
 function pickVoice(text){
   const want = isThai(text) ? "th" : "en";
   const pool = voices.filter(v => v.lang.toLowerCase().startsWith(want));
+  const saved = store.get("voiceName", ""); const fixed = saved && pool.find(v => v.name === saved); if(fixed) return fixed;
   const score = v => (/natural|online|neural/i.test(v.name)?4:0) + (/google/i.test(v.name)?2:0) +
-                     (/ava|andrew|emma|brian|niwat|premwadee/i.test(v.name)?3:0) + (/multilingual/i.test(v.name)?1:0);
+                     (/ryan|thomas|george|oliver/i.test(v.name)?5:0) + (/en-gb/i.test(v.lang)?3:0) +
+                     (/andrew|brian|niwat/i.test(v.name)?2:0) + (/multilingual/i.test(v.name)?1:0);
   return pool.sort((a,b)=>score(b)-score(a))[0] || null;
 }
 const speakQ = []; let speaking = false, speakPulse = 0;
@@ -193,7 +202,8 @@ function feedSpeech(delta, final=false){
 
 // ---------- brain: CEE via Hermes API ----------
 const VOICE_STYLE = "You are in a live spoken conversation through the CEE orb; your reply is read aloud. " +
-  "Talk like a real person: warm, relaxed, contractions, a quick natural reaction first. " +
+  "Speak like JARVIS from Iron Man: calm, polished, quietly witty and always one step ahead. Call the user 'boss' now and then. " +
+  "Sound human: contractions, a brief natural reaction first. " +
   "Keep it to one to three short sentences unless asked for detail. No markdown, lists, emojis or URLs. " +
   "If a screenshot of the user's screen is attached, use it to answer about what they're looking at.";
 
@@ -317,7 +327,18 @@ function pauseWake(){ if(rec && recActive && recMode==="wake") try{ rec.abort();
 function resumeWake(){ if(wakeOn) setTimeout(startWake, 400); }
 
 // ---------- controls ----------
-$("#orb").addEventListener("click", () => { if(state==="listening" && recMode==="once") rec.stop(); else if(state==="speaking"||state==="thinking") stopAll(); else listenOnce(); });
+let booted = false;
+async function activate(){
+  if(booted) return; booted = true; $("#boot").classList.add("gone");
+  try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); await actx.resume(); }catch{}
+  chime(true); await ensureMic();
+  const h = new Date().getHours(), part = h<12 ? "morning" : h<18 ? "afternoon" : "evening";
+  const line = `Good ${part}, Chain. All systems are online. What are we working on today?`;
+  addMsg("cee", line, "cee"); speak(line); if(!voiceOn || !synth) resumeWake();
+}
+$("#boot").addEventListener("click", activate);
+$("#orb").addEventListener("click", () => {
+  if(!booted) return activate(); if(state==="listening" && recMode==="once") rec.stop(); else if(state==="speaking"||state==="thinking") stopAll(); else listenOnce(); });
 $("#text").addEventListener("keydown", e => { if(e.key==="Enter"){ ask(e.target.value); e.target.value=""; } });
 $("#lang").onclick = () => { lang = lang.startsWith("th") ? "en-US" : "th-TH"; store.set("speechLang",lang); refreshButtons(); if(recMode==="wake"){ pauseWake(); resumeWake(); } };
 $("#screen").onclick = () => toggleScreen();
@@ -325,11 +346,30 @@ $("#mute").onclick = () => { voiceOn = !voiceOn; store.set("voice",voiceOn); if(
 $("#wake").onclick = async () => { wakeOn = !wakeOn; store.set("wake",wakeOn); refreshButtons(); if(wakeOn){ await ensureMic(); startWake(); } else pauseWake(); };
 document.addEventListener("keydown", e => {
   if(e.target.id === "text") { if(e.key==="Escape") stopAll(); return; }
-  if(e.code === "Space"){ e.preventDefault(); $("#orb").click(); }
+  if(e.code === "Space"){ e.preventDefault(); if(!booted) activate(); else $("#orb").click(); }
   if(e.key === "Escape") stopAll();
 });
 if(!SR){ $("#wake").style.display="none"; }
-refreshButtons(); if(wakeOn) ensureMic().then(startWake);
+refreshButtons();
+
+// ---------- boot sequence ----------
+(async () => {
+  const lines = ["Initializing CEE core", "Neural link ......... ok", "Memory vault ........ online", "Voice systems ....... online",
+                 "Vision systems ...... standby", "Uplink to CEE ....... " + (KEY ? "secured" : "no key")];
+  const el = $("#bootlog");
+  for(const l of lines){ for(const ch of l){ el.textContent += ch; await new Promise(r=>setTimeout(r,14)); } el.textContent += "\n"; await new Promise(r=>setTimeout(r,160)); }
+  $("#bootgo").classList.add("show");
+})();
+
+// ---------- ambient HUD: weather + battery ----------
+if(navigator.getBattery) navigator.getBattery().then(b => { const u = () => $("#batt").textContent = `power ${Math.round(b.level*100)}%${b.charging?" · charging":""}`; u(); b.onlevelchange = b.onchargingchange = u; });
+function weather(lat, lon){
+  fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`)
+    .then(r=>r.json()).then(d => { const c = d.current; if(c) $("#wx").textContent = `${Math.round(c.temperature_2m)}°C · ${wxName(c.weather_code)}`; }).catch(()=>{});
+}
+function wxName(c){ return c===0?"clear":c<4?"partly cloudy":c<50?"fog":c<70?"rain":c<80?"snow":c<90?"showers":"storm"; }
+navigator.geolocation && navigator.geolocation.getCurrentPosition(p => weather(p.coords.latitude, p.coords.longitude), () => weather(13.75, 100.5), {timeout:8000});
+setInterval(() => navigator.geolocation && navigator.geolocation.getCurrentPosition(p => weather(p.coords.latitude, p.coords.longitude), ()=>{}), 30*60*1000);
 
 // ---------- the orb ----------
 const cv = $("#orb"), cx = cv.getContext("2d"); let W,H,DPR;

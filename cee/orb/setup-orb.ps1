@@ -47,7 +47,8 @@ Copy-Item (Join-Path $page.DirectoryName 'serve.py') "$OrbDir\serve.py" -Force
 Say '3/4 Restart CEE'
 # Computer use: lets CEE see the screen and click/type in apps (one-time driver download).
 hermes computer-use install
-if ($LASTEXITCODE -ne 0) { Write-Host '  Computer control needs one admin step: open PowerShell as Administrator and run:  hermes computer-use install' -ForegroundColor Yellow }
+$CeeCuaOk = ($LASTEXITCODE -eq 0)
+if (-not $CeeCuaOk) { Write-Host '  Computer control needs one admin step: open PowerShell as Administrator and run:  hermes computer-use install' -ForegroundColor Yellow }
 hermes gateway restart
 Start-Sleep 8
 
