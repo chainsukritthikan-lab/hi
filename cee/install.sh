@@ -32,8 +32,8 @@ for b in "${BRANCHES[@]}"; do
 done
 [ -f "$SRC/cee/distribution.yaml" ] || { echo "Could not download CEE from $REPO"; exit 1; }
 
-if [ -f "$PROFILE/distribution.yaml" ]; then
-  hermes profile update cee -y
+if [ -d "$PROFILE" ]; then
+  hermes profile install "$SRC/cee" --alias -y --force
 else
   hermes profile install "$SRC/cee" --alias -y
 fi

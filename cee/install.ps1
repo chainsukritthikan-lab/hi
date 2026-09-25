@@ -26,8 +26,8 @@ $dist = (Get-ChildItem $src -Recurse -Filter distribution.yaml | Select-Object -
 if (-not $dist) { throw "CEE not found in $Repo ($Branch). Is the repo public?" }
 
 Say '3/5 Install CEE'
-if (Test-Path "$Profile\distribution.yaml") {
-    # Re-run: copy the fresh files over, keep memories/keys.
+if (Test-Path $Profile) {
+    # Re-run or leftover folder: copy the fresh files over, keep memories/keys.
     hermes profile install $dist --alias -y --force
 } else {
     hermes profile install $dist --alias -y
