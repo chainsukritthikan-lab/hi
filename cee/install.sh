@@ -55,11 +55,11 @@ else
   umask 077
   {
     echo "NVIDIA_API_KEY=$NV"
-    [ -n "$GEMINI" ] && echo "GEMINI_API_KEY=$GEMINI"
+    if [ -n "$GEMINI" ]; then echo "GEMINI_API_KEY=$GEMINI"; fi
     echo "TELEGRAM_BOT_TOKEN=$TG_TOKEN"
     echo "TELEGRAM_ALLOWED_USERS=$TG_ID"
     echo "TELEGRAM_HOME_CHANNEL=$TG_ID"
-    [ -n "$OR_KEY" ] && echo "OPENROUTER_API_KEY=$OR_KEY"
+    if [ -n "$OR_KEY" ]; then echo "OPENROUTER_API_KEY=$OR_KEY"; fi
   } > "$PROFILE/.env"
   chmod 600 "$PROFILE/.env"
 fi
