@@ -57,11 +57,12 @@ if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^GEMINI_AP
 }
 
 Say '5/5 Start CEE'
-hermes -p cee gateway install
+# One host gateway (default profile) serves every profile, including cee.
+hermes gateway install
 if ($LASTEXITCODE -ne 0) { throw 'Could not register CEE to auto-start - send a screenshot.' }
-hermes -p cee gateway start
-Start-Sleep 3
-hermes -p cee gateway status
+hermes gateway start
+Start-Sleep 5
+hermes gateway status
 
 Say 'Done! Open your bot in Telegram and say: สวัสดี CEE'
 Write-Host 'Then send /cee-onboarding so CEE learns who you are.'

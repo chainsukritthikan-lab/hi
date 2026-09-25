@@ -61,11 +61,12 @@ else
 fi
 
 say "5/5 Start CEE 24/7"
-hermes -p cee gateway install
+# One host gateway (default profile) serves every profile, including cee.
+hermes gateway install
 sudo loginctl enable-linger "$USER"
-hermes -p cee gateway restart 2>/dev/null || hermes -p cee gateway start
-sleep 3
-hermes -p cee gateway status || true
+hermes gateway restart 2>/dev/null || hermes gateway start
+sleep 5
+hermes gateway status || true
 
 say "Done! Open your bot in Telegram and say: สวัสดี CEE"
 echo "Then send /cee-onboarding so CEE learns who you are."

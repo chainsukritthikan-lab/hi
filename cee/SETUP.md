@@ -126,10 +126,10 @@ Say `hi CEE`, then type `/exit`.
 Make it run forever, including after a reboot:
 
 ```bash
-cee gateway install
+hermes gateway install
 sudo loginctl enable-linger $USER
-cee gateway start
-cee gateway status
+hermes gateway start
+hermes gateway status
 ```
 
 Now open your bot in Telegram and say hi. 🎉
@@ -155,7 +155,7 @@ CEE asks about 6 quick questions (your work, goals, style, routine) and remember
   - `/voice on` to reply with voice when you send voice
   - `/voice tts` to always reply with voice
   - `/voice off` to go back to text only
-- **Change the voice:** run `cee config set tts.edge.voice th-TH-PremwadeeNeural` for the female Thai voice, or `en-US-AriaNeural` for English. Then run `cee gateway restart`.
+- **Change the voice:** run `cee config set tts.edge.voice th-TH-PremwadeeNeural` for the female Thai voice, or `en-US-AriaNeural` for English. Then run `hermes gateway restart`.
 
 > Want the ElevenLabs voice from the reel? Its free plan is 10k characters a month. Get a key, add `ELEVENLABS_API_KEY=` to `.env`, run `cee config set tts.provider elevenlabs`, and restart.
 
@@ -212,8 +212,8 @@ Every morning at 07:30 Bangkok time, you'll get today's calendar, important emai
 
 | Command | What it does |
 |---|---|
-| `cee gateway status` | Is CEE running? |
-| `cee gateway restart` | Restart after changing config |
+| `hermes gateway status` | Is CEE running? |
+| `hermes gateway restart` | Restart after changing config |
 | `cee logs` | See what went wrong |
 | `hermes update` | Update Hermes |
 | `cd ~/cee-src && git pull && hermes profile update cee` | Get the latest CEE persona and skills from this repo. Your memory and keys are kept. |
@@ -229,7 +229,7 @@ Every morning at 07:30 Bangkok time, you'll get today's calendar, important emai
 3. If you use CEE heavily, turn on billing in Google AI Studio. Flash models are cheap, usually a few dollars a month.
 
 **The bot doesn't answer.**
-- Run `cee gateway status`, then `cee logs`.
+- Run `hermes gateway status`, then `cee logs`.
 - Check that `TELEGRAM_ALLOWED_USERS` is *your* number from @userinfobot.
 
 **Voice notes aren't understood.** The first voice note downloads the Whisper model, which takes about 1 minute. For better Thai, run `cee config set stt.local.model medium` and restart.
