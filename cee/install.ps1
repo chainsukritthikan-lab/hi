@@ -32,6 +32,7 @@ if (Test-Path "$Profile\distribution.yaml") {
 } else {
     hermes profile install $dist --alias -y
 }
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$Profile\distribution.yaml")) { throw 'CEE install failed - send a screenshot of the error above.' }
 $gws = "$HermesHome\hermes-agent\skills\productivity\google-workspace"
 if ((Test-Path $gws) -and -not (Test-Path "$Profile\skills\productivity\google-workspace")) {
     New-Item -ItemType Directory -Force "$Profile\skills\productivity" | Out-Null
@@ -44,10 +45,15 @@ if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^GEMINI_AP
     Write-Host "Keys already set in $envFile - keeping them."
 } else {
     function Secret($p) { $s = Read-Host $p -AsSecureString
-        [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s)) }
-    $gem = Secret 'Gemini API key'
-    $tok = Secret 'Telegram bot token (from @BotFather)'
-    $id  = Read-Host 'Your Telegram user ID (number from @userinfobot)'
+        ([Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))).Trim() }
+    function Need($p, [switch]$Hidden) {
+        do { $v = if ($Hidden) { Secret $p } else { (Read-Host $p).Trim() }
+             if (-not $v) { Write-Host '  (empty - please paste it, then Enter)' -ForegroundColor Yellow } } while (-not $v)
+        $v }
+    $gem = Need 'Gemini API key' -Hidden
+    $tok = Need 'Telegram bot token (from @BotFather)' -Hidden
+    if ($tok -notmatch '^\d+:[\w-]{30,}$') { Write-Host '  Hmm, bot tokens look like 123456789:AAH... - double-check it if CEE does not reply.' -ForegroundColor Yellow }
+    $id  = Need 'Your Telegram user ID (number from @userinfobot)'
     $or  = Secret 'OpenRouter key (optional backup brain, Enter to skip)'
     $lines = @("GEMINI_API_KEY=$gem", "TELEGRAM_BOT_TOKEN=$tok", "TELEGRAM_ALLOWED_USERS=$id", "TELEGRAM_HOME_CHANNEL=$id")
     if ($or) { $lines += "OPENROUTER_API_KEY=$or" }
@@ -56,6 +62,7 @@ if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^GEMINI_AP
 
 Say '5/5 Start CEE'
 hermes -p cee gateway install
+if ($LASTEXITCODE -ne 0) { throw 'Could not register CEE to auto-start - send a screenshot.' }
 hermes -p cee gateway start
 Start-Sleep 3
 hermes -p cee gateway status
