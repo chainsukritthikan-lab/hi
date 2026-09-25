@@ -56,6 +56,26 @@ if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^GEMINI_AP
     [IO.File]::WriteAllLines($envFile, $lines)
 }
 
+Say '4b/5 CEE Brain (Obsidian memory)'
+$obs = "$HermesHome\hermes-agent\skills\note-taking\obsidian"
+if ((Test-Path $obs) -and -not (Test-Path "$CeeHome\skills\note-taking\obsidian")) {
+    New-Item -ItemType Directory -Force "$CeeHome\skills\note-taking" | Out-Null
+    Copy-Item $obs "$CeeHome\skills\note-taking\" -Recurse
+}
+$vaultLine = Select-String -Path $envFile -Pattern '^OBSIDIAN_VAULT_PATH=(.+)$' | Select-Object -First 1
+$vault = if ($vaultLine) { $vaultLine.Matches[0].Groups[1].Value.Trim() } else { Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'CEE Brain' }
+if (-not (Test-Path $vault)) {
+    New-Item -ItemType Directory -Force $vault | Out-Null
+    Copy-Item "$dist\vault-template\*" $vault -Recurse -Force
+    Get-ChildItem $vault -Recurse -Filter .keep | Remove-Item -Force
+}
+if (-not $vaultLine) { Add-Content -Path $envFile -Value "OBSIDIAN_VAULT_PATH=$vault" }
+Write-Host "CEE Brain vault: $vault"
+if (-not (Test-Path "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe") -and (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Host 'Installing Obsidian (free)...'
+    winget install -e --id Obsidian.Obsidian --accept-source-agreements --accept-package-agreements --silent | Out-Null
+}
+
 Say '5/5 Start CEE'
 # One host gateway (default profile) serves every profile, including cee.
 hermes gateway install
@@ -64,6 +84,7 @@ hermes gateway start
 Start-Sleep 5
 hermes gateway status
 
-Say 'Done! Open your bot in Telegram and say: สวัสดี CEE'
+Say 'Done! Open your bot in Telegram and say: hi CEE'
 Write-Host 'Then send /cee-onboarding so CEE learns who you are.'
+Write-Host "To see CEE's memory: open Obsidian -> 'Open folder as vault' -> $vault" 
 Write-Host 'Note: CEE only answers while this PC is on and logged in.'

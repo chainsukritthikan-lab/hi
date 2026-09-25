@@ -39,7 +39,7 @@ Wait for each answer. Accept voice notes. Keep your follow-ups short.
 Done when all six are answered or skipped.
 
 ### 3. Save
-Use the `memory` tool with target `user`. Write short, factual entries (for example "Goal Q4: land 3 paying ad clients at ≥15k THB each"). Stay under the USER.md limit and merge with existing entries instead of duplicating them. Put working facts about projects in the regular memory (target `memory`).
+Use the `memory` tool with target `user`. Write short, factual entries (for example "Goal Q4: land 3 paying ad clients at ≥15k THB each"). Stay under the USER.md limit and merge with existing entries instead of duplicating them. Put working facts about projects in the regular memory (target `memory`). Also write the full answers into `About Chain.md` in the Obsidian vault (see the `cee-brain` skill).
 
 ### 4. Offer next steps
 Offer these in one short message. Don't set them up without a yes.

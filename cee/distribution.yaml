@@ -22,3 +22,7 @@ env_requires:
     description: "Optional backup brain (free ':free' models) when Gemini's free quota runs out: https://openrouter.ai/keys"
     required: false
     default: ""
+  - name: OBSIDIAN_VAULT_PATH
+    description: "Folder of the Obsidian vault CEE uses as long-term memory (installer creates Documents/CEE Brain)"
+    required: false
+    default: ""
