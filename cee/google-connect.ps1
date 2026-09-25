@@ -37,8 +37,17 @@ if (-not $url) { throw 'Could not create the Google sign-in link - send a screen
 Start-Process $url
 Write-Host 'A Google page opened. Pick your account -> Continue (if it says "not verified") -> tick all boxes -> Continue.'
 Write-Host 'The page will then show an ERROR - that is normal.' -ForegroundColor Yellow
-$cb = Read-Host 'Copy the WHOLE address from that error page, paste it here, press Enter'
-Run-Setup --auth-code $cb.Trim()
+Write-Host 'On that error page: click the ADDRESS BAR, press Ctrl+A, then Ctrl+C. Nothing else - I will pick it up.' -ForegroundColor Yellow
+Set-Clipboard -Value ' '
+$cb = $null; $deadline = (Get-Date).AddMinutes(10)
+while (-not $cb -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 700
+    $clip = (Get-Clipboard -Raw -ErrorAction SilentlyContinue)
+    if ($clip -and $clip -match '(https?://localhost:1/\?\S*code=\S+)') { $cb = $Matches[1] }
+}
+if (-not $cb) { throw 'Did not see the address in 10 minutes - run this again.' }
+Write-Host 'Got it!' -ForegroundColor Green
+Run-Setup --auth-code $cb
 
 Say '3/3 Check'
 Run-Setup --check
