@@ -5,7 +5,7 @@
 # ── Brain: Google Gemini (AI Studio, free tier) ─────────────────────────────
 model:
   provider: gemini
-  default: gemini-3.8-flash
+  default: gemini-3.1-flash-lite-preview   # highest free-tier limits; switch to gemini-3.8-flash if you enable billing
   base_url: https://generativelanguage.googleapis.com/v1beta
 
 # If Gemini's free quota runs out (429), try a free OpenRouter model.
