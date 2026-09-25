@@ -6,7 +6,8 @@ $ErrorActionPreference = 'Stop'
 
 $Repo   = 'chainsukritthikan-lab/hi'
 $Branch = if ($env:CEE_BRANCH) { $env:CEE_BRANCH } else { 'claude/laughing-hopper-d0qios' }
-$HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }
+$HermesHome = if ($env:HERMES_HOME -and $env:HERMES_HOME -notmatch '\\profiles\\') { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }
+Remove-Item Env:HERMES_HOME, Env:PYTHONPATH -ErrorAction SilentlyContinue   # a profile-scoped leftover would redirect hermes
 $CeeHome    = "$HermesHome\profiles\cee"
 function Say($m) { Write-Host "`n>> $m" -ForegroundColor Green }
 

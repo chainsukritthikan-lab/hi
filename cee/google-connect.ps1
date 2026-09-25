@@ -16,8 +16,11 @@ $setup = "$gws\scripts\setup.py"
 $py = Get-ChildItem $HermesHome -Recurse -Depth 6 -Filter python.exe -ErrorAction SilentlyContinue |
       Sort-Object { if ($_.FullName -match 'venv') { 0 } else { 1 } } | Select-Object -First 1
 if (-not $py) { throw "Could not find Hermes' Python - send a screenshot." }
-$env:HERMES_HOME = $CeeHome; $env:PYTHONPATH = $agent
-function Run-Setup { & $py.FullName $setup @args }
+function Run-Setup {
+    $old = $env:HERMES_HOME, $env:PYTHONPATH
+    $env:HERMES_HOME = $CeeHome; $env:PYTHONPATH = $agent
+    try { & $py.FullName $setup @args } finally { $env:HERMES_HOME, $env:PYTHONPATH = $old }
+}
 
 Say '1/3 Find your Google key file'
 $dirs = @("$env:USERPROFILE\Downloads", "$env:USERPROFILE\OneDrive\Downloads", "$env:USERPROFILE\Desktop")

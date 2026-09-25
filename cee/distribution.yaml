@@ -1,6 +1,6 @@
 name: cee
 version: 0.1.0
-description: "CEE — Chain's personal AI agent. Thai + English, Telegram, voice notes, Gmail/Calendar/Drive, web, content skills. Brain: Google Gemini (free tier)."
+description: "CEE — Chain's personal AI agent. Thai + English, Telegram, voice notes, Gmail/Calendar/Drive, web, content skills. Brain: NVIDIA Build (free), Gemini backup."
 author: "Chain"
 license: "MIT"
 
