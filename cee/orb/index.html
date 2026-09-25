@@ -62,6 +62,7 @@ kbd{border:1px solid var(--line);padding:0 5px;border-radius:2px;color:var(--ink
 <div id="bar">
   <button id="lang" title="Language you speak (EN / TH)">EN</button>
   <input id="text" placeholder="Type to CEE…" autocomplete="off">
+  <button id="screen" title="Let CEE see your screen">Screen</button>
   <button id="wake" title="Always listen for “CEE”">Wake</button>
   <button id="mute" title="Voice replies on/off">Voice</button>
 </div>
@@ -98,7 +99,8 @@ function addMsg(who, text, cls){
 function chip(t){ const c = document.createElement("span"); c.className="chip"; c.textContent = t; $("#tools").appendChild(c); setTimeout(()=>c.remove(),3200); }
 function refreshButtons(){
   $("#lang").textContent = lang.startsWith("th") ? "TH" : "EN";
-  $("#mute").classList.toggle("on", voiceOn); $("#wake").classList.toggle("on", wakeOn); setState(state);
+  $("#mute").classList.toggle("on", voiceOn); $("#wake").classList.toggle("on", wakeOn);
+  $("#screen").classList.toggle("on", !!screenStream); setState(state);
 }
 setInterval(()=>{ const d=new Date(); $("#clock").textContent=d.toLocaleTimeString("en-GB");
   $("#date").textContent=d.toLocaleDateString("en-GB",{weekday:"short",day:"2-digit",month:"short",year:"numeric"}); },1000);
@@ -147,7 +149,8 @@ const isThai = t => /[฀-๿]/.test(t);
 function pickVoice(text){
   const want = isThai(text) ? "th" : "en";
   const pool = voices.filter(v => v.lang.toLowerCase().startsWith(want));
-  const score = v => (/natural|online|neural/i.test(v.name)?4:0) + (/google/i.test(v.name)?2:0) + (/niwat|premwadee|aria|jenny|guy/i.test(v.name)?1:0);
+  const score = v => (/natural|online|neural/i.test(v.name)?4:0) + (/google/i.test(v.name)?2:0) +
+                     (/ava|andrew|emma|brian|niwat|premwadee/i.test(v.name)?3:0) + (/multilingual/i.test(v.name)?1:0);
   return pool.sort((a,b)=>score(b)-score(a))[0] || null;
 }
 const speakQ = []; let speaking = false, speakPulse = 0;
@@ -165,7 +168,7 @@ function nextSpeak(){
   speaking = true; setState("speaking"); pauseWake();
   const u = new SpeechSynthesisUtterance(t); const v = pickVoice(t);
   if(v){ u.voice=v; u.lang=v.lang; } else u.lang = isThai(t) ? "th-TH" : "en-US";
-  u.rate = 1.05; u.onboundary = () => { speakPulse = 1; };
+  u.rate = 1.0; u.onboundary = () => { speakPulse = 1; };
   u.onend = u.onerror = () => nextSpeak();
   synth.speak(u);
 }
@@ -189,6 +192,34 @@ function feedSpeech(delta, final=false){
 }
 
 // ---------- brain: CEE via Hermes API ----------
+const VOICE_STYLE = "You are in a live spoken conversation through the CEE orb; your reply is read aloud. " +
+  "Talk like a real person: warm, relaxed, contractions, a quick natural reaction first. " +
+  "Keep it to one to three short sentences unless asked for detail. No markdown, lists, emojis or URLs. " +
+  "If a screenshot of the user's screen is attached, use it to answer about what they're looking at.";
+
+// Screen sharing: when on, every question carries a fresh snapshot of the screen.
+let screenStream = null, screenVideo = null;
+async function toggleScreen(){
+  if(screenStream){ screenStream.getTracks().forEach(t=>t.stop()); screenStream=null; refreshButtons(); return; }
+  try{
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ video:{ frameRate:2 }, audio:false });
+    screenVideo = document.createElement("video"); screenVideo.muted = true; screenVideo.srcObject = screenStream; await screenVideo.play();
+    screenStream.getVideoTracks()[0].addEventListener("ended", () => { screenStream=null; refreshButtons(); });
+    live("CEE can see your screen now. Ask about it.");
+  }catch{ screenStream = null; }
+  refreshButtons();
+}
+function grabScreen(){
+  if(!screenStream || !screenVideo || !screenVideo.videoWidth) return null;
+  const w = Math.min(1280, screenVideo.videoWidth), h = Math.round(screenVideo.videoHeight * w / screenVideo.videoWidth);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").drawImage(screenVideo, 0, 0, w, h); return c.toDataURL("image/jpeg", 0.7);
+}
+async function buildInput(text){
+  const shot = grabScreen(); if(!shot) return text;
+  chip("👁 looking at your screen");
+  return [{ role:"user", content:[ { type:"input_text", text }, { type:"input_image", image_url: shot } ] }];
+}
 async function ask(text){
   text = text.trim(); if(!text) return;
   stopAll(); addMsg("you", text); live(""); setState("thinking");
@@ -198,7 +229,8 @@ async function ask(text){
     const r = await fetch(BASE + "/responses", {
       method:"POST", signal:abortCtl.signal,
       headers:{ "Authorization":"Bearer "+KEY, "Content-Type":"application/json" },
-      body: JSON.stringify({ model:"cee", input:text, conversation:"cee-orb", stream:true,
+      body: JSON.stringify({ model:"cee", input: await buildInput(text), conversation:"cee-orb", stream:true,
+                            instructions: VOICE_STYLE,
                             model_options:{ reasoning_effort:"low" } })  // voice: fast answers
     });
     if(!r.ok) throw new Error(`CEE error ${r.status}: ${(await r.text()).slice(0,200)}`);
@@ -288,6 +320,7 @@ function resumeWake(){ if(wakeOn) setTimeout(startWake, 400); }
 $("#orb").addEventListener("click", () => { if(state==="listening" && recMode==="once") rec.stop(); else if(state==="speaking"||state==="thinking") stopAll(); else listenOnce(); });
 $("#text").addEventListener("keydown", e => { if(e.key==="Enter"){ ask(e.target.value); e.target.value=""; } });
 $("#lang").onclick = () => { lang = lang.startsWith("th") ? "en-US" : "th-TH"; store.set("speechLang",lang); refreshButtons(); if(recMode==="wake"){ pauseWake(); resumeWake(); } };
+$("#screen").onclick = () => toggleScreen();
 $("#mute").onclick = () => { voiceOn = !voiceOn; store.set("voice",voiceOn); if(!voiceOn && synth) synth.cancel(); refreshButtons(); };
 $("#wake").onclick = async () => { wakeOn = !wakeOn; store.set("wake",wakeOn); refreshButtons(); if(wakeOn){ await ensureMic(); startWake(); } else pauseWake(); };
 document.addEventListener("keydown", e => {

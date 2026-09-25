@@ -47,6 +47,9 @@ Copy-Item (Join-Path $page.DirectoryName 'serve.py') "$OrbDir\serve.py" -Force
 Say '3/4 Restart CEE'
 # Faster replies: lighter thinking for everyday chat (ask CEE to "think hard" when you need it).
 hermes -p cee config set agent.reasoning_effort low
+# Computer use: lets CEE see the screen and click/type in apps (one-time driver download).
+hermes computer-use install
+if ($LASTEXITCODE -ne 0) { Write-Host '  (computer use driver did not install - CEE still works without it)' -ForegroundColor Yellow }
 hermes gateway restart
 Start-Sleep 8
 

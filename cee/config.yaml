@@ -64,6 +64,12 @@ tts:
 web:
   keyless_fallback: true
 
+# ── Computer use: CEE can see your screen and click/type in apps ─────────────
+# Needs the driver once:  hermes computer-use install
+# Telegram already includes it; the orb (API server) needs it added.
+platform_toolsets:
+  api_server: [hermes-api-server, computer_use]
+
 # ── Safety ──────────────────────────────────────────────────────────────────
 approvals:
   mode: smart        # risky shell commands ask you "yes/no" in Telegram first
