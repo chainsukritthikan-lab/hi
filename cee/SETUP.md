@@ -48,6 +48,14 @@ ssh -i path/to/your-key.key ubuntu@YOUR_PUBLIC_IP
 
 From now on, every command runs **on the server**.
 
+### ⚡ Fast way: one command does steps 2–5
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chainsukritthikan-lab/hi/main/cee/install.sh | bash
+```
+
+It installs Hermes and CEE, asks for your keys (Gemini, Telegram token, your Telegram ID), and starts CEE 24/7. When it finishes, jump to **step 6**. If you'd rather go step by step, keep reading.
+
 ---
 
 ## 2. Install Hermes Agent
