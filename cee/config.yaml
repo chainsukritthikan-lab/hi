@@ -8,6 +8,10 @@ model:
   default: gemini-3.1-flash-lite-preview   # highest free-tier limits; switch to gemini-3.8-flash if you enable billing
   base_url: https://generativelanguage.googleapis.com/v1beta
 
+# Lighter thinking = faster replies (ask CEE to "think hard" for tough tasks).
+agent:
+  reasoning_effort: low
+
 # If Gemini's free quota runs out (429), try a free OpenRouter model.
 # Only used if OPENROUTER_API_KEY is set in .env.
 fallback_providers:
