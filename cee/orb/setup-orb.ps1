@@ -41,6 +41,7 @@ $page = Get-ChildItem $src -Recurse -Filter index.html | Where-Object { $_.Direc
 if (-not $page) { throw 'Orb page not found in the download.' }
 New-Item -ItemType Directory -Force $OrbDir | Out-Null
 Copy-Item $page.FullName "$OrbDir\index.html" -Force
+Copy-Item (Join-Path $page.DirectoryName 'serve.py') "$OrbDir\serve.py" -Force
 [IO.File]::WriteAllText("$OrbDir\config.js", "window.CEE = { url: 'http://127.0.0.1:8642/p/cee/v1', key: '$ceeKey' };`n")
 
 Say '3/4 Restart CEE'
@@ -53,8 +54,8 @@ $py = Get-ChildItem $HermesHome -Recurse -Depth 6 -Filter pythonw.exe -ErrorActi
       Sort-Object { if ($_.FullName -match 'venv') { 0 } else { 1 } } | Select-Object -First 1
 if (-not $py) { $py = Get-Command pythonw.exe -ErrorAction SilentlyContinue | ForEach-Object { Get-Item $_.Source } }
 if (-not $py) { throw 'Could not find Python for the orb server - send a screenshot.' }
-$srvArgs = "-m http.server 8765 --bind 127.0.0.1 --directory `"$OrbDir`""
-Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" | Where-Object { $_.CommandLine -match 'http.server 8765' } |
+$srvArgs = "`"$OrbDir\serve.py`""
+Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" | Where-Object { $_.CommandLine -match 'http.server 8765|cee-orb' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 Start-Process $py.FullName -ArgumentList $srvArgs -WindowStyle Hidden
 $sh = New-Object -ComObject WScript.Shell
