@@ -80,6 +80,12 @@ if (-not (Test-Path "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe") -and (Ge
 }
 
 Say '5/5 Start CEE'
+# Keep gateway locks in a folder this user owns (an admin-started gateway can leave
+# admin-owned locks in ~\.local\state that block Telegram with "Permission denied").
+$lockDir = "$HermesHome\gateway-locks"
+New-Item -ItemType Directory -Force $lockDir | Out-Null
+[Environment]::SetEnvironmentVariable('HERMES_GATEWAY_LOCK_DIR', $lockDir, 'User')
+$env:HERMES_GATEWAY_LOCK_DIR = $lockDir
 # One host gateway (default profile) serves every profile, including cee.
 hermes gateway install
 if ($LASTEXITCODE -ne 0) { throw 'Could not register CEE to auto-start - send a screenshot.' }
