@@ -45,11 +45,9 @@ Copy-Item (Join-Path $page.DirectoryName 'serve.py') "$OrbDir\serve.py" -Force
 [IO.File]::WriteAllText("$OrbDir\config.js", "window.CEE = { url: 'http://127.0.0.1:8642/p/cee/v1', key: '$ceeKey' };`n")
 
 Say '3/4 Restart CEE'
-# Faster replies: lighter thinking for everyday chat (ask CEE to "think hard" when you need it).
-hermes -p cee config set agent.reasoning_effort low
 # Computer use: lets CEE see the screen and click/type in apps (one-time driver download).
 hermes computer-use install
-if ($LASTEXITCODE -ne 0) { Write-Host '  (computer use driver did not install - CEE still works without it)' -ForegroundColor Yellow }
+if ($LASTEXITCODE -ne 0) { Write-Host '  Computer control needs one admin step: open PowerShell as Administrator and run:  hermes computer-use install' -ForegroundColor Yellow }
 hermes gateway restart
 Start-Sleep 8
 
