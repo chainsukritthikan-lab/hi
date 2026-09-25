@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $Repo   = 'chainsukritthikan-lab/hi'
 $Branch = if ($env:CEE_BRANCH) { $env:CEE_BRANCH } else { 'claude/laughing-hopper-d0qios' }
 $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }
-$Profile    = "$HermesHome\profiles\cee"
+$CeeHome    = "$HermesHome\profiles\cee"
 function Say($m) { Write-Host "`n>> $m" -ForegroundColor Green }
 
 Say '1/5 Hermes Agent'
@@ -26,21 +26,17 @@ $dist = (Get-ChildItem $src -Recurse -Filter distribution.yaml | Select-Object -
 if (-not $dist) { throw "CEE not found in $Repo ($Branch). Is the repo public?" }
 
 Say '3/5 Install CEE'
-if (Test-Path $Profile) {
-    # Re-run or leftover folder: copy the fresh files over, keep memories/keys.
-    hermes profile install $dist --alias -y --force
-} else {
-    hermes profile install $dist --alias -y
-}
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$Profile\distribution.yaml")) { throw 'CEE install failed - send a screenshot of the error above.' }
+# --force: safe on re-runs / leftover folders; memories and .env are always kept.
+hermes profile install $dist --alias -y --force
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$CeeHome\distribution.yaml")) { throw 'CEE install failed - send a screenshot of the error above.' }
 $gws = "$HermesHome\hermes-agent\skills\productivity\google-workspace"
-if ((Test-Path $gws) -and -not (Test-Path "$Profile\skills\productivity\google-workspace")) {
-    New-Item -ItemType Directory -Force "$Profile\skills\productivity" | Out-Null
-    Copy-Item $gws "$Profile\skills\productivity\" -Recurse
+if ((Test-Path $gws) -and -not (Test-Path "$CeeHome\skills\productivity\google-workspace")) {
+    New-Item -ItemType Directory -Force "$CeeHome\skills\productivity" | Out-Null
+    Copy-Item $gws "$CeeHome\skills\productivity\" -Recurse
 }
 
 Say '4/5 Your keys'
-$envFile = "$Profile\.env"
+$envFile = "$CeeHome\.env"
 if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^GEMINI_API_KEY=.+' -Quiet)) {
     Write-Host "Keys already set in $envFile - keeping them."
 } else {
