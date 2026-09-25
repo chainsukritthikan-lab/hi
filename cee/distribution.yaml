@@ -5,9 +5,13 @@ author: "Chain"
 license: "MIT"
 
 env_requires:
-  - name: GEMINI_API_KEY
-    description: "Google AI Studio key — CEE's brain (free): https://aistudio.google.com/apikey"
+  - name: NVIDIA_API_KEY
+    description: "NVIDIA Build key — CEE's brain (free): https://build.nvidia.com"
     required: true
+  - name: GEMINI_API_KEY
+    description: "Google AI Studio key — backup brain (free): https://aistudio.google.com/apikey"
+    required: false
+    default: ""
   - name: TELEGRAM_BOT_TOKEN
     description: "Bot token from @BotFather"
     required: true

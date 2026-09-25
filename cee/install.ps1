@@ -37,7 +37,7 @@ if ((Test-Path $gws) -and -not (Test-Path "$CeeHome\skills\productivity\google-w
 
 Say '4/5 Your keys'
 $envFile = "$CeeHome\.env"
-if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^GEMINI_API_KEY=.+' -Quiet)) {
+if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^(NVIDIA|GEMINI)_API_KEY=.+' -Quiet)) {
     Write-Host "Keys already set in $envFile - keeping them."
 } else {
     function Secret($p) { $s = Read-Host $p -AsSecureString
@@ -46,12 +46,14 @@ if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^GEMINI_AP
         do { $v = if ($Hidden) { Secret $p } else { (Read-Host $p).Trim() }
              if (-not $v) { Write-Host '  (empty - please paste it, then Enter)' -ForegroundColor Yellow } } while (-not $v)
         $v }
-    $gem = Need 'Gemini API key' -Hidden
+    $nv  = Need 'NVIDIA API key (free, build.nvidia.com)' -Hidden
+    $gem = Secret 'Gemini API key (optional backup brain, Enter to skip)'
     $tok = Need 'Telegram bot token (from @BotFather)' -Hidden
     if ($tok -notmatch '^\d+:[\w-]{30,}$') { Write-Host '  Hmm, bot tokens look like 123456789:AAH... - double-check it if CEE does not reply.' -ForegroundColor Yellow }
     $id  = Need 'Your Telegram user ID (number from @userinfobot)'
     $or  = Secret 'OpenRouter key (optional backup brain, Enter to skip)'
-    $lines = @("GEMINI_API_KEY=$gem", "TELEGRAM_BOT_TOKEN=$tok", "TELEGRAM_ALLOWED_USERS=$id", "TELEGRAM_HOME_CHANNEL=$id")
+    $lines = @("NVIDIA_API_KEY=$nv", "TELEGRAM_BOT_TOKEN=$tok", "TELEGRAM_ALLOWED_USERS=$id", "TELEGRAM_HOME_CHANNEL=$id")
+    if ($gem) { $lines += "GEMINI_API_KEY=$gem" }
     if ($or) { $lines += "OPENROUTER_API_KEY=$or" }
     [IO.File]::WriteAllLines($envFile, $lines)
 }
