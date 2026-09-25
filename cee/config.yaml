@@ -1,0 +1,69 @@
+# CEE — Hermes Agent config
+# Anything not listed here uses Hermes' defaults.
+# Change a value later with:  cee config set <section.key> <value>
+
+# ── Brain: Google Gemini (AI Studio, free tier) ─────────────────────────────
+model:
+  provider: gemini
+  default: gemini-3.8-flash
+  base_url: https://generativelanguage.googleapis.com/v1beta
+
+# If Gemini's free quota runs out (429), try a free OpenRouter model.
+# Only used if OPENROUTER_API_KEY is set in .env.
+fallback_providers:
+  - provider: openrouter
+    model: "nvidia/nemotron-3-ultra-550b-a55b:free"
+
+# Background helper calls (safety checks, titles, memory search) —
+# keep them cheap so the free quota lasts for real conversations.
+auxiliary:
+  free_only: true
+  openrouter_model: "nvidia/nemotron-3-ultra-550b-a55b:free"
+  approval:
+    provider: gemini
+    model: gemini-3.1-flash-lite-preview
+  title_generation:
+    model_upgrade_enabled: false
+
+# ── Where you live ──────────────────────────────────────────────────────────
+timezone: Asia/Bangkok
+
+# ── Memory: built-in (free, local) + Holographic fact store (free, local) ──
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  provider: holographic
+
+# ── Voice ───────────────────────────────────────────────────────────────────
+# Voice notes → text: local Whisper on the server (free, no key).
+# Language "" = auto-detect so Thai and English both work.
+stt:
+  enabled: true
+  provider: local
+  language: ""
+  echo_transcripts: true
+  local:
+    model: small
+    language: ""
+
+# Text → voice replies: Microsoft Edge voices (free, no key).
+# Thai voices: th-TH-NiwatNeural (male) / th-TH-PremwadeeNeural (female)
+# Turn on in Telegram with /voice on (reply by voice when you send voice)
+# or /voice tts (always talk).
+tts:
+  provider: edge
+  edge:
+    voice: th-TH-NiwatNeural
+
+# ── Web ─────────────────────────────────────────────────────────────────────
+# Keyless free search + page reading out of the box.
+web:
+  keyless_fallback: true
+
+# ── Safety ──────────────────────────────────────────────────────────────────
+approvals:
+  mode: smart        # risky shell commands ask you "yes/no" in Telegram first
+  cron_mode: deny    # scheduled jobs never run risky commands on their own
+
+# Strangers who DM the bot get nothing.
+unauthorized_dm_behavior: ignore

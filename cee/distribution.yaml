@@ -1,0 +1,25 @@
+name: cee
+version: 0.1.0
+description: "CEE — Chain's personal AI agent. Thai + English, Telegram, voice notes, Gmail/Calendar/Drive, web, content skills. Brain: Google Gemini (free tier)."
+hermes_requires: ">=0.12.0"
+author: "Chain"
+license: "MIT"
+
+env_requires:
+  - name: GEMINI_API_KEY
+    description: "Google AI Studio key — CEE's brain (free): https://aistudio.google.com/apikey"
+    required: true
+  - name: TELEGRAM_BOT_TOKEN
+    description: "Bot token from @BotFather"
+    required: true
+  - name: TELEGRAM_ALLOWED_USERS
+    description: "Your numeric Telegram user ID from @userinfobot (only you can talk to CEE)"
+    required: true
+  - name: TELEGRAM_HOME_CHANNEL
+    description: "Where scheduled messages go — usually the same as your user ID"
+    required: false
+    default: ""
+  - name: OPENROUTER_API_KEY
+    description: "Optional backup brain (free ':free' models) when Gemini's free quota runs out: https://openrouter.ai/keys"
+    required: false
+    default: ""

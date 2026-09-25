@@ -13,3 +13,11 @@ Open `index.html` in Chrome. No install, no API key.
 - **Teleprompter**: fullscreen scrolling script, speed + size, mirror mode, 3-2-1 countdown, space = play/pause.
 - **Record in browser**: turn on the camera in teleprompter mode and record takes straight to a video file.
 - **Library**: save scripts locally and reload them later.
+
+---
+
+# CEE 🟢
+
+My personal AI agent (a Jarvis named **CEE**). It runs on Hermes Agent with a Gemini brain: Telegram, voice notes, Thai + English, Gmail/Calendar/Drive, and content skills, all free.
+
+👉 [cee/README.md](cee/README.md) · setup: [cee/SETUP.md](cee/SETUP.md)
