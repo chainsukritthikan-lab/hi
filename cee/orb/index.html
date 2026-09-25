@@ -236,6 +236,13 @@ async function ask(text){
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, recActive = false, recMode = null, wakeArmed = false;
 const WAKE = /^\s*(?:hey|hi|ok|okay|เฮ้|เฮ|ฮัลโหล)?\s*(?:cee|see|sea|si|c|ซีอี|ซีย์|ซี)(?:[\s,.!?]+|$)/i;
+function micHelp(err){
+  if(err === "network" || err === "service-not-allowed") return "Voice input doesn't work in this browser — open CEE in Microsoft Edge (desktop icon).";
+  if(err === "not-allowed") return "Microphone is blocked — click the 🔒 next to the address, allow Microphone, then reload.";
+  if(err === "no-speech") return "Didn't hear anything — click the orb and speak.";
+  if(err === "audio-capture") return "No microphone found — check it's plugged in.";
+  return err === "aborted" ? "" : "mic: " + err;
+}
 function makeRec(continuous){
   const r = new SR(); r.lang = lang; r.interimResults = true; r.continuous = continuous; r.maxAlternatives = 1; return r;
 }
@@ -245,8 +252,9 @@ async function listenOnce(){
   rec = makeRec(false); recMode = "once"; let finalText = "";
   rec.onstart = () => { recActive = true; setState("listening"); chime(true); };
   rec.onresult = e => { let t=""; for(const res of e.results){ t += res[0].transcript; if(res.isFinal) finalText = t; } live(t); };
-  rec.onerror = e => { if(e.error!=="aborted" && e.error!=="no-speech") live("mic: " + e.error); };
-  rec.onend = () => { recActive = false; recMode = null; if(finalText) ask(finalText); else { setState("idle"); live(""); resumeWake(); } };
+  let errMsg = "";
+  rec.onerror = e => { errMsg = micHelp(e.error); live(errMsg); };
+  rec.onend = () => { recActive = false; recMode = null; if(finalText) ask(finalText); else { setState("idle"); live(errMsg); resumeWake(); } };
   try{ rec.start(); }catch{}
 }
 function startWake(){
@@ -264,8 +272,9 @@ function startWake(){
       }
     }
   };
-  rec.onerror = () => {};
-  rec.onend = () => { recActive = false; recMode = null; if(wakeOn && state==="idle") setTimeout(startWake, 300); };
+  let fatal = false;
+  rec.onerror = e => { if(["network","not-allowed","service-not-allowed","audio-capture"].includes(e.error)){ fatal = true; live(micHelp(e.error)); } };
+  rec.onend = () => { recActive = false; recMode = null; if(!fatal && wakeOn && state==="idle") setTimeout(startWake, 300); };
   try{ rec.start(); }catch{}
 }
 function pauseWake(){ if(rec && recActive && recMode==="wake") try{ rec.abort(); }catch{} }
