@@ -42,7 +42,7 @@ $page = Get-ChildItem $src -Recurse -Filter index.html | Where-Object { $_.Direc
 if (-not $page) { throw 'Orb page not found in the download.' }
 New-Item -ItemType Directory -Force $OrbDir | Out-Null
 Copy-Item $page.FullName "$OrbDir\index.html" -Force
-foreach ($f in 'serve.py', 'cee_ball.pyw', 'ear.html') { Copy-Item (Join-Path $page.DirectoryName $f) "$OrbDir\$f" -Force }
+foreach ($f in 'serve.py') { Copy-Item (Join-Path $page.DirectoryName $f) "$OrbDir\$f" -Force }
 [IO.File]::WriteAllText("$OrbDir\config.js", "window.CEE = { url: 'http://127.0.0.1:8642/p/cee/v1', key: '$ceeKey' };`n")
 
 Say '3/4 Restart CEE'
@@ -68,20 +68,8 @@ $st = $sh.CreateShortcut([Environment]::GetFolderPath('Startup') + '\CEE Orb Ser
 $st.TargetPath = $py.FullName; $st.Arguments = $srvArgs; $st.WindowStyle = 7; $st.Save()
 
 # Taskbar ball: Ctrl+Shift (or click it) and talk. Auto-starts at login.
-$ballArgs = "`"$OrbDir\cee_ball.pyw`""
-Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" | Where-Object { $_.CommandLine -match 'cee_ball' } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-$pyCon = Join-Path $py.DirectoryName 'python.exe'
-$tkOk = (-not (Test-Path $pyCon)) -or
-        ((Start-Process $pyCon -ArgumentList '-c', 'import tkinter' -Wait -PassThru -WindowStyle Hidden).ExitCode -eq 0)
-if (-not $tkOk) {
-    Write-Host '  Taskbar ball skipped: this Python has no tkinter - send a screenshot.' -ForegroundColor Yellow
-} else {
-    Start-Sleep 1
-    Start-Process $py.FullName -ArgumentList $ballArgs
-    $bl = $sh.CreateShortcut([Environment]::GetFolderPath('Startup') + '\CEE Ball.lnk')
-    $bl.TargetPath = $py.FullName; $bl.Arguments = $ballArgs; $bl.Save()
-}
+$CeeBallSrc = $page.DirectoryName
+iex (Get-Content -Raw "$CeeBallSrc\setup-ball.ps1")
 
 # Open in Microsoft Edge app mode: supports voice input + natural Thai voices, and looks like an app.
 $edge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") |

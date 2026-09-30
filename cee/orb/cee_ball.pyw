@@ -7,11 +7,30 @@
 # Ears and mouth are a hidden Microsoft Edge window (ear.html: Edge speech
 # recognition + natural voices). The brain call goes from here to CEE's local API.
 import ctypes, ctypes.wintypes as wt, json, math, os, queue, re, subprocess, sys
-import threading, time, urllib.request, http.server
-import tkinter as tk
+import threading, time, traceback, urllib.request, http.server
 
-sys.stdout = sys.stderr = open(os.devnull, "w")  # pythonw has no console
 HERE = os.path.dirname(os.path.abspath(__file__))
+LOG = os.path.join(HERE, "ball.log")
+if sys.stderr is None or sys.executable.lower().endswith("pythonw.exe"):
+    sys.stdout = sys.stderr = open(LOG, "w", encoding="utf-8", buffering=1)   # pythonw has no console
+
+
+def fix_tcl():
+    """Python inside a venv often can't find Tcl/Tk ('Can't find a usable init.tcl'). Point it there."""
+    roots = [os.path.join(sys.base_prefix, "tcl"), os.path.join(sys.base_prefix, "lib"), sys.base_prefix]
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for d in sorted(os.listdir(root), reverse=True):
+            full = os.path.join(root, d)
+            if re.fullmatch(r"tcl\d[\d.]*", d) and os.path.exists(os.path.join(full, "init.tcl")):
+                os.environ.setdefault("TCL_LIBRARY", full)
+            if re.fullmatch(r"tk\d[\d.]*", d) and os.path.exists(os.path.join(full, "tk.tcl")):
+                os.environ.setdefault("TK_LIBRARY", full)
+
+
+fix_tcl()
+import tkinter as tk  # noqa: E402
 PORT = 8766
 SETTINGS = os.path.join(HERE, "ball.json")
 VOICE_STYLE = (
@@ -217,6 +236,7 @@ class Ball:
         self.ear_proc = None
         self.ear_ready = False
         self.drag = None
+        self.last_top = 0
 
         r = self.root = tk.Tk()
         r.overrideredirect(True)
@@ -255,6 +275,8 @@ class Ball:
         self.ear_proc = launch_ear()
         if not self.ear_proc:
             self.say_bubble("I need Microsoft Edge for my ears and voice.", 10)
+        else:
+            self.say_bubble("Hi boss, I'm down here. Tap Ctrl+Shift (or click me) to talk.", 8)
         self.tick()
 
     # --- placement ---
@@ -343,6 +365,7 @@ class Ball:
         threading.Thread(target=work, daemon=True).start()
 
     def say_bubble(self, text, secs):
+        self.root.update_idletasks()
         self.btext.config(text=text if len(text) < 400 else text[:400] + "...")
         self.bubble.update_idletasks()
         bw, bh = self.bubble.winfo_reqwidth(), self.bubble.winfo_reqheight()
@@ -405,9 +428,11 @@ class Ball:
         if self.bubble_until and time.time() > self.bubble_until and self.state in ("idle", "oops"):
             self.bubble.withdraw()
             self.bubble_until = 0
-        if int(time.time() * 2) % 4 == 0:
-            self.root.attributes("-topmost", True)   # stay above the taskbar
-            self.root.lift()
+        if time.time() - self.last_top > 1.5:            # stay above the taskbar
+            self.last_top = time.time()
+            for w in (self.root, self.bubble):
+                hwnd = user32.GetParent(w.winfo_id()) or w.winfo_id()
+                user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0013)   # TOPMOST, no move/size/activate
         self.draw()
         self.root.after(40, self.tick)
 
@@ -472,4 +497,11 @@ if __name__ == "__main__":
         probe.close()
     except OSError:
         sys.exit(0)
-    Ball().root.mainloop()
+    try:
+        ball = Ball()
+        ball.root.report_callback_exception = lambda *a: traceback.print_exception(*a)
+        ball.root.mainloop()
+    except Exception:
+        traceback.print_exc()
+        ctypes.windll.user32.MessageBoxW(0, "CEE ball crashed:\n\n" + traceback.format_exc()[-900:]
+                                         + "\n\nSend Claude a screenshot of this.", "CEE ball", 0x10)
