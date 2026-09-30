@@ -71,24 +71,55 @@ def api_config():
     return url, key
 
 
-def ask_cee(text):
+TOOL_WORDS = {"computer_use": "Looking at your screen...", "web_search": "Searching the web...",
+              "terminal": "Working on it...", "browser": "Opening the browser..."}
+
+
+def ask_cee(text, on_text, on_tool):
+    """Stream CEE's answer: on_text(delta) as words arrive, on_tool(name) when it uses a tool."""
     url, key = api_config()
     body = json.dumps({
-        "model": "cee", "input": text, "conversation": "cee-orb", "stream": False,
+        "model": "cee", "input": text, "conversation": "cee-ball", "stream": True,
         "instructions": VOICE_STYLE, "model_options": {"reasoning_effort": "low"},
     }).encode()
     req = urllib.request.Request(url + "/responses", body, {
-        "Content-Type": "application/json", "Authorization": "Bearer " + key})
+        "Content-Type": "application/json", "Authorization": "Bearer " + key, "Accept": "text/event-stream"})
+    got = False
     with urllib.request.urlopen(req, timeout=240) as r:
-        data = json.load(r)
-    if data.get("output_text"):
-        return data["output_text"]
-    parts = []
-    for item in data.get("output", []):
-        for c in item.get("content", []) or []:
-            if c.get("type") in ("output_text", "text") and c.get("text"):
-                parts.append(c["text"])
-    return "\n".join(parts).strip() or "Hmm, I came up empty on that one."
+        for raw in r:
+            line = raw.decode("utf-8", "replace").strip()
+            if not line.startswith("data:"):
+                continue
+            try:
+                ev = json.loads(line[5:].strip())
+            except ValueError:
+                continue
+            t = ev.get("type", "")
+            if t == "response.output_text.delta" and ev.get("delta"):
+                got = True
+                on_text(ev["delta"])
+            elif t == "response.output_item.added" and (ev.get("item") or {}).get("type") == "function_call":
+                on_tool(ev["item"].get("name", ""))
+            elif t in ("response.failed", "error"):
+                raise RuntimeError(json.dumps(ev)[:200])
+    if not got:
+        on_text("Hmm, I came up empty on that one.")
+
+
+def sentences(buf, final):
+    """Cut finished sentences off the front of buf so CEE can start talking early."""
+    out = []
+    while True:
+        m = re.match(r"[\s\S]*?([.!?\u2026]|\n)(?=\s)", buf)
+        if m and len(m.group(0).strip()) > 1:
+            out.append(m.group(0)); buf = buf[m.end():]; continue
+        if len(buf) > 220:
+            cut = buf.rfind(" ", 0, 200); cut = cut if cut > 60 else 200
+            out.append(buf[:cut]); buf = buf[cut:]; continue
+        break
+    if final and buf.strip():
+        out.append(buf); buf = ""
+    return out, buf
 
 
 # ---------- the ear (hidden Edge window) talks to us over this tiny server ----------
@@ -235,7 +266,9 @@ class Ball:
         self.chord = Chord()
         self.ear_proc = None
         self.ear_ready = False
-        self.drag = None
+        self.turn = 0
+        self.said = ""
+        self.pending = ""
         self.last_top = 0
 
         r = self.root = tk.Tk()
@@ -267,8 +300,6 @@ class Ball:
         self.refresh_menu()
 
         self.c.bind("<ButtonPress-1>", self.press)
-        self.c.bind("<B1-Motion>", self.move)
-        self.c.bind("<ButtonRelease-1>", self.release)
         self.c.bind("<Button-3>", lambda e: self.menu.tk_popup(e.x_root, e.y_root))
 
         start_server()
@@ -288,22 +319,20 @@ class Ball:
         return int(14 * self.scale), sh - bar + (bar - self.size - 14) // 2
 
     def press(self, e):
-        self.drag = (e.x_root, e.y_root, self.root.winfo_x(), self.root.winfo_y(), False)
-
-    def move(self, e):
-        x0, y0, wx, wy, _ = self.drag
-        if abs(e.x_root - x0) + abs(e.y_root - y0) > 4:
-            self.drag = (x0, y0, wx, wy, True)
-            self.root.geometry(f"+{wx + e.x_root - x0}+{wy + e.y_root - y0}")
-
-    def release(self, e):
-        moved = self.drag and self.drag[4]
-        self.drag = None
-        if moved:
-            self.s["x"], self.s["y"] = self.root.winfo_x(), self.root.winfo_y()
+        # Let Windows drag the window (like grabbing a title bar). Returns when the mouse is released.
+        x0, y0 = self.root.winfo_x(), self.root.winfo_y()
+        hwnd = user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+        user32.ReleaseCapture()
+        user32.SendMessageW(hwnd, 0x00A1, 2, 0)          # WM_NCLBUTTONDOWN, HTCAPTION
+        self.root.update_idletasks()
+        x1, y1 = self.root.winfo_x(), self.root.winfo_y()
+        if abs(x1 - x0) + abs(y1 - y0) > 3:
+            self.s["x"], self.s["y"] = x1, y1
             save_settings(self.s)
+            if self.bubble.winfo_viewable():
+                self.say_bubble(self.btext.cget("text"), max(1, self.bubble_until - time.time()))
         else:
-            self.toggle()
+            self.toggle()                                 # a click, not a drag
 
     # --- menu actions ---
     def refresh_menu(self):
@@ -344,24 +373,28 @@ class Ball:
                 self.set_state("oops")
                 return self.say_bubble("My ears are still waking up, give me a sec...", 4)
             self.heard = ""
+            self.turn += 1
             self.set_state("listening")
             self.send({"cmd": "listen", "lang": self.lang})
         else:   # tap again = stop / shush
+            self.turn += 1
             self.send({"cmd": "stop"})
             self.set_state("idle")
             self.bubble.withdraw()
 
     def think(self, text):
         self.set_state("thinking")
+        self.turn += 1
+        turn, self.said, self.pending = self.turn, "", ""
         self.say_bubble("You: " + text, 60)
 
         def work():
             try:
-                reply = ask_cee(text)
+                ask_cee(text, lambda d: events.put(("delta", {"turn": turn, "text": d})),
+                        lambda n: events.put(("tool", {"turn": turn, "name": n})))
+                events.put(("done", {"turn": turn}))
             except Exception as e:
-                reply = None
-                err = str(e)
-            events.put(("reply", {"text": reply} if reply else {"error": err}))
+                events.put(("done", {"turn": turn, "error": str(e)}))
         threading.Thread(target=work, daemon=True).start()
 
     def say_bubble(self, text, secs):
@@ -400,15 +433,27 @@ class Ball:
                 else:
                     self.set_state("idle")
                     self.bubble.withdraw()
-        elif kind == "reply":
-            if self.state != "thinking":
+        elif kind in ("delta", "tool", "done"):
+            if msg.get("turn") != self.turn or self.state not in ("thinking", "speaking"):
+                return                                    # old answer you already cut off
+            if kind == "tool":
+                if not self.said:
+                    self.say_bubble(TOOL_WORDS.get(msg["name"], "Working on it..."), 120)
                 return
-            if msg.get("error"):
+            if kind == "done" and msg.get("error") and not self.said:
                 self.set_state("oops")
                 return self.say_bubble("I can't reach my brain right now. Is CEE running? (" + msg["error"][:80] + ")", 8)
-            self.set_state("speaking")
-            self.say_bubble(msg["text"], 120)
-            self.send({"cmd": "speak", "text": msg["text"], "lang": self.lang})
+            self.said += msg.get("text", "")
+            self.pending += msg.get("text", "")
+            chunks, self.pending = sentences(self.pending, kind == "done")
+            for c in chunks:
+                self.send({"cmd": "say", "text": c})
+            if self.said.strip():
+                if self.state != "speaking":
+                    self.set_state("speaking")
+                self.say_bubble(self.said.strip(), 120)
+            if kind == "done":
+                self.send({"cmd": "done"})
         elif kind == "spoken":
             if self.state == "speaking":
                 self.set_state("idle")

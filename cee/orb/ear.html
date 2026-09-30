@@ -60,23 +60,23 @@ function clean(t) {
   return t.replace(/```[\s\S]*?```/g, " (code) ").replace(/`([^`]*)`/g, "$1").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
           .replace(/https?:\/\/\S+/g, "link").replace(/[*_#>|~]/g, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s+/g, " ").trim();
 }
-function speak(text) {
-  synth.cancel(); stopped = false;
-  // short chunks: long utterances can stall in Edge
-  const parts = clean(text).match(/[^.!?…]+[.!?…]*\s*/g) || [];
-  if (!parts.length) return post("/spoken");
-  let i = 0;
-  const next = () => {
-    if (stopped) return;
-    if (i >= parts.length) return post("/spoken");
-    const u = new SpeechSynthesisUtterance(parts[i++]); const v = pickVoice(text);
-    if (v) { u.voice = v; u.lang = v.lang; } else u.lang = isThai(text) ? "th-TH" : "en-US";
-    u.onend = next; u.onerror = e => { log("voice error: " + e.error); next(); };
-    synth.speak(u);
-  };
-  next();
+// Sentences arrive one by one while CEE is still thinking ("say"); "done" = no more coming.
+const sayQ = []; let talking = false, allIn = true;
+function say(text) {
+  const t = clean(text); if (t) sayQ.push(t);
+  if (!talking) next();
 }
-function stopAll() { stopped = true; if (rec) try { rec.abort(); } catch {} synth.cancel(); }
+function next() {
+  if (stopped) return;
+  const t = sayQ.shift();
+  if (!t) { talking = false; if (allIn) post("/spoken"); return; }
+  talking = true;
+  const u = new SpeechSynthesisUtterance(t); const v = pickVoice(t);
+  if (v) { u.voice = v; u.lang = v.lang; } else u.lang = isThai(t) ? "th-TH" : "en-US";
+  u.onend = next; u.onerror = e => { log("voice error: " + e.error); next(); };
+  synth.speak(u);
+}
+function stopAll() { stopped = true; sayQ.length = 0; talking = false; allIn = true; if (rec) try { rec.abort(); } catch {} synth.cancel(); }
 
 // ---------- orders from the ball (long-poll, so it works while hidden) ----------
 async function loop() {
@@ -87,7 +87,8 @@ async function loop() {
     catch { await new Promise(r => setTimeout(r, 1500)); await post("/hello", { id }); continue; }
     if (cmd.cmd === "close") return window.close();
     if (cmd.cmd === "listen") listen(cmd.lang);
-    else if (cmd.cmd === "speak") speak(cmd.text || "");
+    else if (cmd.cmd === "say") { if (stopped) { synth.cancel(); stopped = false; } allIn = false; say(cmd.text || ""); }
+    else if (cmd.cmd === "done") { allIn = true; if (!talking) post("/spoken"); }
     else if (cmd.cmd === "stop") stopAll();
   }
 }
