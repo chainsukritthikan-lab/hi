@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CEE Ear</title>
+<style>
+  body { margin: 0; padding: 16px; background: #111; color: #ffe98a; font: 14px "Segoe UI", sans-serif; }
+  button { background: #ffd21f; color: #222; border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+  #log { margin-top: 12px; color: #bbb; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<b>CEE's ears + voice</b> (the taskbar ball uses this window; it normally stays hidden).<br><br>
+<button id="test">Test microphone</button>
+<div id="log"></div>
+<script>
+const id = Math.random().toString(36).slice(2);
+const log = m => { const el = document.getElementById("log"); el.textContent = (m + "\n" + el.textContent).slice(0, 2000); };
+const post = (path, body) => fetch(path, { method: "POST", body: JSON.stringify(body || {}) }).catch(() => {});
+
+// ---------- ears ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, stopped = false;
+function listen(lang) {
+  if (!SR) return post("/heard", { error: "no speech recognition in this browser", final: true });
+  if (rec) try { rec.abort(); } catch {}
+  stopped = false;
+  let finalText = "", sent = false;
+  rec = new SR();
+  rec.lang = lang || "en-US"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  rec.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalText += e.results[i][0].transcript; else interim += e.results[i][0].transcript;
+    }
+    post("/heard", { text: (finalText + interim).trim(), final: false });
+  };
+  rec.onerror = e => {
+    log("ear error: " + e.error);
+    if (stopped || e.error === "aborted") return;
+    if (e.error === "no-speech") return;   // onend reports an empty result
+    sent = true; post("/heard", { error: e.error, final: true });
+  };
+  rec.onend = () => { if (!sent && !stopped) { sent = true; post("/heard", { text: finalText.trim(), final: true }); } };
+  try { rec.start(); log("listening (" + rec.lang + ")"); } catch (err) { post("/heard", { error: String(err), final: true }); }
+}
+
+// ---------- voice ----------
+const synth = window.speechSynthesis; let voices = [];
+const loadVoices = () => { voices = synth.getVoices(); };
+loadVoices(); synth.onvoiceschanged = loadVoices;
+const isThai = t => /[฀-๿]/.test(t);
+function pickVoice(text) {
+  const want = isThai(text) ? "th" : "en";
+  const score = v => (/natural|online|neural/i.test(v.name) ? 4 : 0) + (/ryan|thomas|george|oliver/i.test(v.name) ? 5 : 0) +
+                     (/en-gb/i.test(v.lang) ? 3 : 0) + (/andrew|brian|niwat/i.test(v.name) ? 2 : 0);
+  return voices.filter(v => v.lang.toLowerCase().startsWith(want)).sort((a, b) => score(b) - score(a))[0] || null;
+}
+function clean(t) {
+  return t.replace(/```[\s\S]*?```/g, " (code) ").replace(/`([^`]*)`/g, "$1").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+          .replace(/https?:\/\/\S+/g, "link").replace(/[*_#>|~]/g, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s+/g, " ").trim();
+}
+function speak(text) {
+  synth.cancel(); stopped = false;
+  // short chunks: long utterances can stall in Edge
+  const parts = clean(text).match(/[^.!?…]+[.!?…]*\s*/g) || [];
+  if (!parts.length) return post("/spoken");
+  let i = 0;
+  const next = () => {
+    if (stopped) return;
+    if (i >= parts.length) return post("/spoken");
+    const u = new SpeechSynthesisUtterance(parts[i++]); const v = pickVoice(text);
+    if (v) { u.voice = v; u.lang = v.lang; } else u.lang = isThai(text) ? "th-TH" : "en-US";
+    u.onend = next; u.onerror = e => { log("voice error: " + e.error); next(); };
+    synth.speak(u);
+  };
+  next();
+}
+function stopAll() { stopped = true; if (rec) try { rec.abort(); } catch {} synth.cancel(); }
+
+// ---------- orders from the ball (long-poll, so it works while hidden) ----------
+async function loop() {
+  await post("/hello", { id });
+  for (;;) {
+    let cmd = {};
+    try { cmd = await (await fetch("/cmd?id=" + id, { cache: "no-store" })).json(); }
+    catch { await new Promise(r => setTimeout(r, 1500)); await post("/hello", { id }); continue; }
+    if (cmd.cmd === "close") return window.close();
+    if (cmd.cmd === "listen") listen(cmd.lang);
+    else if (cmd.cmd === "speak") speak(cmd.text || "");
+    else if (cmd.cmd === "stop") stopAll();
+  }
+}
+loop();
+
+document.getElementById("test").onclick = () => {
+  const r = new SR(); r.lang = "en-US";
+  r.onresult = e => log("heard: " + e.results[0][0].transcript);
+  r.onerror = e => log("mic error: " + e.error);
+  r.start(); log("say something...");
+};
+</script>
+</body>
+</html>
